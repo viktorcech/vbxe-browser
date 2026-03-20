@@ -106,6 +106,7 @@ no_vbxe cli
         icl 'vbxe_detect.asm'
         icl 'vbxe_init.asm'
         icl 'vbxe_text.asm'
+        icl 'vbxe_gfx.asm'
         icl 'fujinet.asm'
         icl 'modem850.asm'
         icl 'network.asm'

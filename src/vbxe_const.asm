@@ -206,6 +206,7 @@ zp_hist_ptr    = $A9
 zp_fn_got_data = $AA
 zp_net_device  = $AB   ; 0=FujiNet, 1=Modem/850
 zp_modem_online = $AC  ; 1=serial port active
+zp_img_ptr     = $AD   ; 2 bytes - image write pointer (MEMAC B window)
 
 ; ----------------------------------------------------------------------------
 ; Macros
