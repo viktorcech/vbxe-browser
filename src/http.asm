@@ -20,6 +20,13 @@
         cmp #136
         beq ?done
 
+        ; Check for network error (e.g. DNS error 207)
+        lda zp_fn_error
+        beq ?no_err
+        cmp #136
+        beq ?done              ; 136 = normal EOF
+        jmp ?rd_err            ; any other error = show error
+?no_err
         lda zp_fn_connected
         beq ?done
 
