@@ -62,11 +62,19 @@ m_help  dta c' Mouse:Click link  U:URL  B:Back  Q:Quit',0
         ; Check mouse button click
         lda zp_mouse_btn
         beq ?no_click
+        ; Debounce: wait for button release
         lda #0
         sta zp_mouse_btn
-        ; Is cursor over a link?
+?brel   lda zp_mouse_btn
+        bne ?brel2
+        ; Button released — check what was clicked
         jsr mouse_check_link
         bcs ?no_click
+        jmp ?brel_end
+?brel2  lda #0
+        sta zp_mouse_btn
+        jmp ?brel
+?brel_end
         ; A = link number — follow it
         sta zp_cur_link
         lda #KEY_NONE

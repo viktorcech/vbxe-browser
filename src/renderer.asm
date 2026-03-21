@@ -191,14 +191,20 @@
         ; Check mouse button click
         lda zp_mouse_btn
         beq ?no_click
+        ; Debounce: wait for button release
         lda #0
         sta zp_mouse_btn
-        ; Is cursor over a link?
+?brel   lda zp_mouse_btn
+        bne ?brel2
+        ; Button released — check what was clicked
         jsr mouse_check_link
         bcs ?click_cont        ; not on link — treat as "next page"
         ; A = link number — store as pending
         sta pending_link
         jmp ?next              ; continue page (will follow link after)
+?brel2  lda #0
+        sta zp_mouse_btn
+        jmp ?brel
 ?click_cont
         ; Click not on link = "next page" (like Space)
         jmp ?next

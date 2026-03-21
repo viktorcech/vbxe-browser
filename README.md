@@ -83,7 +83,6 @@ Images on web pages are shown as clickable `[N]IMG` links with blue color. Click
 ## Credits
 
 - [MADS](https://github.com/tebe6502/Mad-Assembler) assembler by Tomasz Biela
-- 850 handler approach based on [Ice-T XE](https://github.com/ivop/Ice-T-XE) by Itay Chamiel
 - VBXE graphics mode reference from [st2vbxe](https://github.com/pfusik/st2vbxe) by Piotr Fusik
 - Mouse driver based on GOS (flashjazzcat) quadrature decoder
 
