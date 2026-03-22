@@ -237,11 +237,12 @@
         lda #0
         sta img_src_buf,x
 ?icpd   jsr img_fetch_single
-        ; Restore --More-- prompt and continue waiting
-        status_msg COL_YELLOW, m_more
-        lda #0
-        sta zp_mouse_btn
-        jmp ?wait
+        ; Connection is now closed (img_fetch used it).
+        ; Abort rendering — page content stays on screen as-is.
+        lda #$FF
+        sta pending_link       ; no pending link
+        sec
+        rts
 
 ?normal_click
         ; Normal link — store pending and ABORT rendering (C=1)

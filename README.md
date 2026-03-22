@@ -6,7 +6,7 @@
 
 ## Status
 
-**Alpha 42** - early development, testing on real hardware. Help is welcome!
+**Alpha 46** - early development, testing on real hardware. Help is welcome!
 
 ## Requirements
 
@@ -19,32 +19,34 @@
 ## Features
 
 - **VBXE 80-column text** using overlay mode with color attributes
-- **ST mouse support** - point and click on links, works in all screens including --More-- prompt
+- **ST mouse support** - point and click on links, works during browsing and page scrolling
 - **HTML parser**: headings (h1-h3), paragraphs, links, lists (ul/ol), bold, italic, tables, blockquotes, code/pre, entities
-- **Image viewing** - images shown as clickable `[N]IMG` links, click to view fullscreen via vbxe.php converter (256-color, up to 320x184)
+- **Image viewing** - inline images shown as clickable IMG links, fullscreen display via server-side converter (256-color, up to 320x184)
+- **Up to 64 links per page** with palette-encoded link detection
 - **URL navigation** with address bar input
 - **History** with back navigation
-- **Link following** - click with mouse or press link number
 - **FujiNet networking** - HTTP via N: device SIO
+- **UTF-8 filtering** - multi-byte sequences skipped gracefully
 
 ## VBXE Display
 
 The browser uses VBXE overlay in text mode (TMON) for 80-column display:
 
 - 80x24 character grid with per-character color attributes
-- 7 colors: white (text), blue (links), orange (headings), green (URL bar), red (errors), gray (decorative), yellow (status/highlighted links)
-- Font stored in VBXE VRAM ($2000)
+- 8 colors: white (text), blue (links), orange (headings), green (URL bar), red (errors), gray (status), yellow (loading/highlights)
+- Link detection via palette-encoded attributes ($20-$5F = 64 link slots, all rendered as blue)
+- Font from Atari ROM remapped to ASCII in VBXE VRAM
 - Fullscreen image display via GMON overlay with 256-color palette
 
 ## Controls
 
 | Input | Action |
 |-------|--------|
-| **Mouse click** | Follow link / view image |
+| **Mouse click** | Follow link / view image / scroll page |
 | **U** | Enter URL |
 | **B** | Back (history) |
 | **Q** | Quit / return to welcome |
-| **Space/Return** | Next page (at --More-- prompt) |
+| **Space/Return** | Scroll to next page |
 
 ## Building
 
@@ -64,21 +66,21 @@ mads src/browser.asm -o:bin/browser.xex -l:bin/browser.lab
 | `vbxe_init.asm` | VBXE initialization (XDL, palette, font, blitter) |
 | `vbxe_text.asm` | 80-column text rendering engine |
 | `vbxe_gfx.asm` | Graphics mode for image display (GMON, palette, pixel streaming) |
-| `img_fetch.asm` | Image download, URL resolve, vbxe.php converter integration |
+| `img_fetch.asm` | Image download, URL resolution, vbxe.php converter integration |
 | `fujinet.asm` | FujiNet N: device SIO layer |
 | `network.asm` | Network abstraction layer |
 | `http.asm` | HTTP GET workflow, URL handling, relative URL resolution |
-| `html_parser.asm` | Streaming HTML tag/entity parser (32 tags) |
+| `html_parser.asm` | Streaming HTML tag/entity parser (28 tags, 64 links) |
 | `renderer.asm` | Text layout, word wrapping, pagination |
 | `keyboard.asm` | Keyboard input via CIO K: device |
-| `ui.asm` | UI: URL bar, status bar, navigation, main loop |
-| `mouse.asm` | ST mouse driver (Timer IRQ + VBI, quadrature decoding) |
+| `ui.asm` | UI: URL bar, status bar, navigation, main event loop |
+| `mouse.asm` | ST mouse driver (Timer 1 IRQ + VBI, quadrature decoding) |
 | `history.asm` | URL history stack (16 entries) |
-| `data.asm` | Buffers and string data |
+| `data.asm` | Buffers, image queue, string data |
 
 ## Image Support
 
-Images on web pages are shown as clickable `[N]IMG` links with blue color. Clicking downloads the image through a server-side converter (`vbxe.php`) that resizes and converts to VBXE 256-color format, then displays fullscreen.
+Images on web pages appear as clickable IMG links in blue. Clicking downloads the image through a server-side converter (`vbxe.php` on turiecfoto.sk) that resizes and converts to VBXE 256-color format (up to 320x184), then displays fullscreen. Press any key to return to the page. Direct image URLs (.png, .jpg, .gif) are also supported.
 
 ## Credits
 
