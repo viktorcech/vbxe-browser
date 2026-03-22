@@ -34,7 +34,6 @@
         jsr history_init
         jsr html_reset
         jsr render_reset
-        jsr ui_init
         jsr show_welcome
         jsr ui_main_loop
         ; ui_main_loop never returns (Q goes to welcome screen)
@@ -47,104 +46,7 @@ no_vbxe cli
         jmp (COLDSV)
 .endp
 
-; ----------------------------------------------------------------------------
-; show_welcome
-; ----------------------------------------------------------------------------
-.proc show_welcome
-        ; Title
-        lda #TITLE_ROW
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_H1
-        jsr vbxe_setattr
-        lda #<msg_welcome
-        ldx #>msg_welcome
-        jsr vbxe_print
-
-        ; Subtitle
-        lda #3
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_NORMAL
-        jsr vbxe_setattr
-        lda #<msg_welcome2
-        ldx #>msg_welcome2
-        jsr vbxe_print
-
-        ; Requirements
-        lda #5
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_DECOR
-        jsr vbxe_setattr
-        lda #<msg_req
-        ldx #>msg_req
-        jsr vbxe_print
-
-        ; Controls
-        lda #7
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_H3
-        jsr vbxe_setattr
-        lda #<msg_keys_hdr
-        ldx #>msg_keys_hdr
-        jsr vbxe_print
-
-        lda #8
-        ldx #2
-        jsr vbxe_setpos
-        lda #ATTR_NORMAL
-        jsr vbxe_setattr
-        lda #<msg_keys1
-        ldx #>msg_keys1
-        jsr vbxe_print
-
-        lda #9
-        ldx #2
-        jsr vbxe_setpos
-        lda #<msg_keys2
-        ldx #>msg_keys2
-        jsr vbxe_print
-
-        lda #10
-        ldx #2
-        jsr vbxe_setpos
-        lda #<msg_keys3
-        ldx #>msg_keys3
-        jsr vbxe_print
-
-        lda #11
-        ldx #2
-        jsr vbxe_setpos
-        lda #<msg_keys4
-        ldx #>msg_keys4
-        jsr vbxe_print
-
-        ; Prompt
-        lda #13
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_LINK
-        jsr vbxe_setattr
-        lda #<msg_press_u
-        ldx #>msg_press_u
-        jsr vbxe_print
-
-        ; Author / credits
-        lda #CONTENT_BOT
-        ldx #0
-        jsr vbxe_setpos
-        lda #ATTR_DECOR
-        jsr vbxe_setattr
-        lda #<msg_author
-        ldx #>msg_author
-        jsr vbxe_print
-
-        lda #ATTR_NORMAL
-        jsr vbxe_setattr
-        rts
-.endp
+; show_welcome is in title.asm
 
 ; ============================================================================
 ; Include all modules
@@ -165,6 +67,7 @@ no_vbxe cli
         icl 'img_fetch.asm'
         icl 'history.asm'
         icl 'mouse.asm'
+        icl 'title.asm'
         icl 'data.asm'
 
 ; ============================================================================

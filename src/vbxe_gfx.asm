@@ -279,8 +279,8 @@ img_wr_bank    dta b(0)        ; MEMAC B bank number
         inx
 
         ; --- Remaining scanlines below image ---
-        ; Calculate: remaining = 192 - img_height
-        lda #192
+        ; Calculate: remaining = (total - border) - img_height
+        lda #SCR_ROWS * 8 - 24
         sec
         sbc img_height
         beq ?no_text           ; image fills screen exactly
@@ -372,4 +372,114 @@ img_remaining dta b(0)
         jsr setup_xdl
         memb_off
         rts
+.endp
+
+; ============================================================================
+; Title Screen Graphics - GMON gradient banner
+; ============================================================================
+
+VRAM_GRADIENT  = VRAM_IMG_BASE   ; Reuses image VRAM space ($3000)
+GRAD_BAND_W    = 320             ; Pixels per scanline (NORMAL mode)
+GRAD_BANDS     = 4
+GRAD_BAND_H    = 8              ; Scanlines per band
+TITLE_TEXT_ROWS = (240 - GRAD_BANDS * GRAD_BAND_H) / 8  ; = 26
+
+; ----------------------------------------------------------------------------
+; title_gfx_init - Fill gradient VRAM + set up title XDL (GMON+TMON)
+; MUST be below $4000 (uses MEMAC B)
+; ----------------------------------------------------------------------------
+.proc title_gfx_init
+        memb_on 0
+
+        ; Fill 4 gradient bands at MEMB_BASE + VRAM_GRADIENT ($7000)
+        lda #<(MEMB_BASE + VRAM_GRADIENT)
+        sta zp_tmp_ptr
+        lda #>(MEMB_BASE + VRAM_GRADIENT)
+        sta zp_tmp_ptr+1
+
+        ldx #0
+?band   lda grad_colors,x
+        stx zp_tmp1            ; save band index
+
+        ; Fill 256 bytes
+        ldy #0
+?f1     sta (zp_tmp_ptr),y
+        iny
+        bne ?f1
+
+        ; Advance pointer by 256
+        inc zp_tmp_ptr+1
+
+        ; Fill remaining 64 bytes (320-256)
+        ldy #0
+?f2     sta (zp_tmp_ptr),y
+        iny
+        cpy #64
+        bne ?f2
+
+        ; Advance pointer by 64
+        clc
+        lda zp_tmp_ptr
+        adc #64
+        sta zp_tmp_ptr
+        bcc ?nc
+        inc zp_tmp_ptr+1
+?nc     ldx zp_tmp1
+        inx
+        cpx #GRAD_BANDS
+        bne ?band
+
+        ; Copy title XDL to VRAM
+        ldx #0
+?xdl    lda title_xdl_data,x
+        sta MEMB_XDL,x
+        inx
+        cpx #TITLE_XDL_LEN
+        bne ?xdl
+
+        memb_off
+        rts
+
+; Gradient colors: palette indices, top (dark) to bottom (light)
+grad_colors dta 8, 9, 10, 11
+
+title_xdl_data
+        ; Band 0 (top, darkest)
+        dta a(XDLC_GMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_OVATT)
+        dta GRAD_BAND_H - 1
+        dta <VRAM_GRADIENT, >VRAM_GRADIENT, 0
+        dta a(0)                       ; step=0 (repeat scanline)
+        dta $11, $FF                   ; palette 1 + NORMAL, priority
+
+        ; Band 1
+        dta a(XDLC_GMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_OVATT)
+        dta GRAD_BAND_H - 1
+        dta <(VRAM_GRADIENT + GRAD_BAND_W), >(VRAM_GRADIENT + GRAD_BAND_W), 0
+        dta a(0)
+        dta $11, $FF
+
+        ; Band 2
+        dta a(XDLC_GMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_OVATT)
+        dta GRAD_BAND_H - 1
+        dta <(VRAM_GRADIENT + GRAD_BAND_W*2), >(VRAM_GRADIENT + GRAD_BAND_W*2), 0
+        dta a(0)
+        dta $11, $FF
+
+        ; Band 3 (bottom, lightest)
+        dta a(XDLC_GMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_OVATT)
+        dta GRAD_BAND_H - 1
+        dta <(VRAM_GRADIENT + GRAD_BAND_W*3), >(VRAM_GRADIENT + GRAD_BAND_W*3), 0
+        dta a(0)
+        dta $11, $FF
+
+        ; Text section (26 rows = 208 scanlines)
+        dta a(XDLC_TMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_CHBASE | XDLC_OVATT | XDLC_END)
+        dta TITLE_TEXT_ROWS * 8 - 1
+        dta <VRAM_SCREEN, >VRAM_SCREEN, 0
+        dta a(SCR_STRIDE)
+        dta CHBASE_VAL
+        dta $11                        ; palette 1 + NORMAL
+        dta $FF                        ; priority
+
+TITLE_XDL_LEN = * - title_xdl_data
 .endp

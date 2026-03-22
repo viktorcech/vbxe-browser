@@ -6,6 +6,8 @@
 ; ui_init - Initialize UI layout
 ; ----------------------------------------------------------------------------
 .proc ui_init
+        ; Restore normal 30-row text XDL (title screen uses GMON gradient XDL)
+        jsr vbxe_restore_xdl
         jsr vbxe_cls
 
         ; URL bar (row 0, green)
@@ -112,13 +114,13 @@ m_help  dta c' Click:Link  U:URL  B:Back  Q:Quit',0
         jsr vbxe_img_hide
 ?qi1    jsr html_reset
         jsr render_reset
-        jsr ui_init
         jsr show_welcome
         lda #$FF
         sta zp_mouse_prev_x
         jmp ?loop
 
 ?url    jsr mouse_hide_cursor
+        jsr ui_init
         jsr ui_url_input
         bcs ?url_done
         jsr history_push
@@ -130,6 +132,7 @@ m_help  dta c' Click:Link  U:URL  B:Back  Q:Quit',0
         jmp ?loop
 
 ?back   jsr mouse_hide_cursor
+        jsr ui_init
         jsr history_pop
         bcs ?back_done
         jsr http_navigate

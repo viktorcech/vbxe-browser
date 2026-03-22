@@ -4,10 +4,10 @@
 
 ; Row address lookup tables (MEMB_SCREEN + row * SCR_STRIDE)
 row_addr_lo
-        :24 dta <(MEMB_SCREEN + # * SCR_STRIDE)
+        :29 dta <(MEMB_SCREEN + # * SCR_STRIDE)
 
 row_addr_hi
-        :24 dta >(MEMB_SCREEN + # * SCR_STRIDE)
+        :29 dta >(MEMB_SCREEN + # * SCR_STRIDE)
 
 ; ----------------------------------------------------------------------------
 ; calc_scr_ptr - Calculate screen pointer for cursor position
@@ -244,3 +244,15 @@ row_addr_hi
 
 vbxe_rw_val dta 0
 vbxe_rw_off dta 0
+
+; ----------------------------------------------------------------------------
+; vbxe_restore_xdl - Restore normal 30-row text XDL
+; MUST be below $4000 (uses MEMAC B)
+; Called from ui_init (above $4000) to switch from title/image XDL
+; ----------------------------------------------------------------------------
+.proc vbxe_restore_xdl
+        memb_on 0
+        jsr setup_xdl
+        memb_off
+        rts
+.endp

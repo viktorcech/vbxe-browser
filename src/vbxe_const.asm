@@ -66,35 +66,35 @@ XDLC_END      = $8000
 ; ----------------------------------------------------------------------------
 ; VBXE VRAM Layout
 ; ----------------------------------------------------------------------------
-VRAM_SCREEN    = $0000  ; Screen: 24*160 = 3840 bytes
-VRAM_SCREEN_SZ = 3840
-VRAM_BCB       = $1000  ; BCB blocks
-VRAM_XDL       = $1100  ; XDL
+VRAM_SCREEN    = $0000  ; Screen: SCR_ROWS*160 bytes (4800 for 30 rows)
+VRAM_BCB       = $1300  ; BCB blocks (after screen)
+VRAM_PATTERN   = $1380  ; Fill pattern (2 bytes)
+VRAM_XDL       = $1400  ; XDL
 VRAM_FONT      = $2000  ; Font: 256*8 = 2048 bytes
 VRAM_FONT_INV  = $2800  ; Inverse font
-VRAM_PATTERN   = $1080  ; Fill pattern (2 bytes)
 
 ; CPU addresses when MEMAC B bank 0 active ($4000 + VRAM offset)
 MEMB_BASE      = $4000
 MEMB_SCREEN    = $4000
-MEMB_BCB       = $5000
-MEMB_XDL       = $5100
+MEMB_BCB       = $5300
+MEMB_PATTERN   = $5380
+MEMB_XDL       = $5400
 MEMB_FONT      = $6000
-MEMB_PATTERN   = $5080
 
 ; Screen dimensions
 SCR_COLS       = 80
-SCR_ROWS       = 24
+SCR_ROWS       = 29
 SCR_STRIDE     = 160    ; 80 chars + 80 attrs
+VRAM_SCREEN_SZ = SCR_ROWS * SCR_STRIDE
 CHBASE_VAL     = 4      ; VRAM_FONT / $800
 
-; Content area
+; Content area (derived from SCR_ROWS)
 CONTENT_TOP    = 2
-CONTENT_BOT    = 22
-CONTENT_ROWS   = 21
+CONTENT_BOT    = SCR_ROWS - 2
+CONTENT_ROWS   = SCR_ROWS - 3
 URL_ROW        = 0
 TITLE_ROW      = 1
-STATUS_ROW     = 23
+STATUS_ROW     = SCR_ROWS - 1
 
 ; ----------------------------------------------------------------------------
 ; Color Palette Indices (overlay palette 1)

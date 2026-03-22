@@ -122,28 +122,22 @@ int2asc dta 2, 0, 1, 3
         rts
 
 xdl_data
-        ; Entry 1: top border + overlay setup
+        ; Entry 1: top border (8 scanlines for CRT overscan)
+        ; Initialize overlay params but display off (OVOFF)
         dta a(XDLC_OVOFF | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_CHBASE | XDLC_OVATT)
-        dta 24-1                       ; 24 empty scanlines
-
-        ; Overlay address (3 bytes)
+        dta 8-1                        ; 8 blank scanlines
         dta <VRAM_SCREEN, >VRAM_SCREEN, 0
-
-        ; Overlay step
         dta a(SCR_STRIDE)
-
-        ; CHBASE
         dta CHBASE_VAL
+        dta %00010001                  ; palette 1, NORMAL width
+        dta $FF                        ; priority
 
-        ; OVATT: palette 1 for overlay
-        dta %00010001
-
-        ; Priority
-        dta $FF
-
-        ; Entry 2: text area
-        dta a(XDLC_TMON | XDLC_RPTL | XDLC_END)
-        dta SCR_ROWS * 8 - 1          ; 191 scanlines
+        ; Entry 2: text mode (29 rows = 232 scanlines)
+        ; Re-set OVADR to row 0 (OVOFF advanced it during border)
+        dta a(XDLC_TMON | XDLC_MAPOFF | XDLC_RPTL | XDLC_OVADR | XDLC_END)
+        dta SCR_ROWS * 8 - 1          ; 231 scanlines
+        dta <VRAM_SCREEN, >VRAM_SCREEN, 0
+        dta a(SCR_STRIDE)
 
 XDL_LEN = * - xdl_data
 .endp
@@ -300,6 +294,28 @@ BCB_CONTENT_SCROLL_OFS = 63
         cpx #8
         bne ?lp
 
+        ; --- Gradient palette (indices 8-11) for title banner ---
+        ldx #0
+?grad   ldy #VBXE_CR
+        lda grad_pal_r,x
+        sta (zp_vbxe_base),y
+        iny
+        lda grad_pal_g,x
+        sta (zp_vbxe_base),y
+        iny
+        lda grad_pal_b,x
+        sta (zp_vbxe_base),y
+
+        ldy #VBXE_CSEL
+        txa
+        clc
+        adc #9
+        sta (zp_vbxe_base),y
+
+        inx
+        cpx #4
+        bne ?grad
+
         ; Set palette entries $20-$3F to blue (link colors with embedded link#)
         ldy #VBXE_CSEL
         lda #ATTR_LINK_BASE
@@ -332,4 +348,9 @@ BCB_CONTENT_SCROLL_OFS = 63
 pal_r dta   $00, $FF, $00, $FF, $00, $FF, $88, $FF
 pal_g dta   $00, $FF, $AA, $AA, $FF, $44, $88, $FF
 pal_b dta   $00, $FF, $FF, $00, $00, $44, $88, $00
+
+; Gradient: dark blue (top) → medium blue (bottom)
+grad_pal_r dta $10, $20, $30, $50
+grad_pal_g dta $10, $30, $60, $90
+grad_pal_b dta $40, $80, $C0, $FF
 .endp

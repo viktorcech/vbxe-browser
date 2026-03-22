@@ -20,12 +20,24 @@
         sta http_idle_cnt
         sta http_bytes_lo
         sta http_bytes_hi
+        sta http_remain_lo     ; remaining bytes from last STATUS
+        sta http_remain_hi
 
-?rdlp   jsr fn_status
+        ; --- Main read loop ---
+        ; Optimization: after STATUS reports N bytes, read multiple
+        ; 255-byte chunks without re-calling STATUS. Saves ~7ms per
+        ; skipped STATUS call (significant for large pages).
+
+?rdlp   ; Check if we still have remaining bytes from previous STATUS
+        lda http_remain_lo
+        ora http_remain_hi
+        bne ?do_read           ; skip STATUS, read directly
+
+        ; No remaining - need STATUS to check state
+        jsr fn_status
         bcc ?st_ok
         jmp ?rd_err
 ?st_ok
-
         ; Check error byte from FujiNet status
         lda zp_fn_error
         beq ?no_err            ; 0 = no error
@@ -39,16 +51,44 @@
         ; Check bytes waiting FIRST (data may be buffered after disconnect)
         lda zp_fn_bytes_lo
         ora zp_fn_bytes_hi
-        beq ?no_data
+        bne ?has_data
+        jmp ?no_data
+?has_data
 
+        ; Store remaining bytes from STATUS
+        lda zp_fn_bytes_lo
+        sta http_remain_lo
+        lda zp_fn_bytes_hi
+        sta http_remain_hi
+
+?do_read
         ; Data available - reset idle counter
         lda #0
         sta http_idle_cnt
 
+        ; Set fn_read input from remaining (fn_read caps at 255)
+        lda http_remain_lo
+        sta zp_fn_bytes_lo
+        lda http_remain_hi
+        sta zp_fn_bytes_hi
+
         jsr fn_read
         bcc ?rd_ok
+        ; Read failed - clear remaining, report error
+        lda #0
+        sta http_remain_lo
+        sta http_remain_hi
         jmp ?rd_err
 ?rd_ok
+        ; Subtract read bytes from remaining
+        lda http_remain_lo
+        sec
+        sbc zp_rx_len
+        sta http_remain_lo
+        bcs ?no_borrow
+        dec http_remain_hi
+?no_borrow
+
         lda zp_rx_len
         beq ?rdlp
 
@@ -77,7 +117,9 @@
         ; (not just idle - user must be able to cancel anytime)
         lda CH
         cmp #KEY_NONE
-        beq ?rdlp
+        bne ?chk_key
+        jmp ?rdlp
+?chk_key
         cmp #KEY_SPACE         ; ignore Space auto-repeat
         beq ?clr_dl
         cmp #KEY_RETURN        ; ignore Return auto-repeat
@@ -109,14 +151,14 @@
 ?clr_sp lda #KEY_NONE
         sta CH                 ; clear auto-repeat Space/Return
 ?no_key
-        ; Idle timeout: ~2 sec (30 iterations * 4 frames * 16ms)
+        ; Idle timeout: ~2.4 sec (120 iterations * 1 frame * 20ms PAL)
         inc http_idle_cnt
         lda http_idle_cnt
-        cmp #30
+        cmp #120
         bcs ?done              ; timeout = done (server keep-alive)
 
-        ; Wait ~4 frames
-        wait_frames 4
+        ; Wait 1 frame (faster idle response)
+        wait_frames 1
         jmp ?rdlp
 
 ?done   jsr fn_close
@@ -169,6 +211,8 @@ m_rderr dta c'Read err $'
 m_rderr_hex dta c'00',0
 m_rderr_code dta b(0)
 http_idle_cnt dta b(0)
+http_remain_lo dta b(0)
+http_remain_hi dta b(0)
 .endp
 
 ; Global so html_tags.asm can reset them at <body>
