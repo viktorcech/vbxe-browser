@@ -65,7 +65,6 @@ ENTITY_BUF_SZ  = 8
         sta zp_in_skip
         sta is_closing
         sta in_title
-        sta img_queue_count
         sta img_src_len
         sta utf8_skip
         sta td_count

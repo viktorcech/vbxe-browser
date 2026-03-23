@@ -10,7 +10,6 @@ IMG_MAX_WIDTH  = 320           ; Max width = VBXE standard mode
 
 ; Image state
 img_active     dta b(0)        ; 1 = image on screen
-img_count      dta b(0)        ; images shown counter
 
 ; Working variables for current image
 img_height     dta b(0)
@@ -26,7 +25,6 @@ img_wr_bank    dta b(0)        ; MEMAC B bank number
 .proc vbxe_img_reset
         lda #0
         sta img_active
-        sta img_count
         rts
 .endp
 
@@ -85,47 +83,166 @@ img_wr_bank    dta b(0)        ; MEMAC B bank number
         lda zp_rx_len
         beq ?done
 
-        ; Disable interrupts: IRQ/VBI handlers are above $4000,
-        ; MEMAC B maps VRAM over $4000-$7FFF — interrupt would crash!
         sei
-
-        ; Enable MEMAC B
-        ldy #VBXE_MEMAC_B
         lda img_wr_bank
         ora #$80
+        sta zp_memb_shadow     ; shadow FIRST (VBI is NMI, can't mask!)
+        ldy #VBXE_MEMAC_B
         sta (zp_vbxe_base),y
 
-        ; Copy bytes from rx_buffer to VRAM
         ldx #0
 ?lp     ldy #0
         lda rx_buffer,x
         sta (zp_img_ptr),y
-
-        ; Advance VRAM pointer
         inc zp_img_ptr
         bne ?nc
         inc zp_img_ptr+1
         lda zp_img_ptr+1
-        cmp #$80               ; Crossed $8000 = end of 16KB window
+        cmp #$80
         bne ?nc
-        ; Next bank
         lda #$40
         sta zp_img_ptr+1
         inc img_wr_bank
-        ldy #VBXE_MEMAC_B
         lda img_wr_bank
         ora #$80
+        sta zp_memb_shadow     ; shadow FIRST
+        ldy #VBXE_MEMAC_B
         sta (zp_vbxe_base),y
 ?nc     inx
         cpx zp_rx_len
         bne ?lp
-
-        ; Disable MEMAC B
         memb_off
-
-        ; Re-enable interrupts
         cli
+?done   rts
+.endp
 
+; ============================================================================
+; Page Buffer - VRAM storage for downloaded HTML pages
+; Download entire page to VRAM, then render from VRAM (N1: free for images)
+; ALL page buffer code MUST be below $4000 (uses MEMAC B)
+; ============================================================================
+
+; Page buffer state variables
+pb_wr_bank     dta b(0)        ; MEMAC B bank for writing
+pb_rd_bank     dta b(0)        ; MEMAC B bank for reading
+pb_total       dta b(0),b(0),b(0)   ; 24-bit total bytes buffered
+pb_read        dta b(0),b(0),b(0)   ; 24-bit bytes read so far
+
+; ----------------------------------------------------------------------------
+; vbxe_pb_init_write - Initialize page buffer write pointer
+; ----------------------------------------------------------------------------
+.proc vbxe_pb_init_write
+        lda #PAGE_BUF_BANK
+        sta pb_wr_bank
+        lda #<MEMB_BASE
+        sta zp_pb_wr_ptr
+        lda #>MEMB_BASE
+        sta zp_pb_wr_ptr+1
+        lda #0
+        sta pb_total
+        sta pb_total+1
+        sta pb_total+2
+        rts
+.endp
+
+; ----------------------------------------------------------------------------
+; vbxe_pb_init_read - Initialize page buffer read pointer
+; ----------------------------------------------------------------------------
+.proc vbxe_pb_init_read
+        lda #PAGE_BUF_BANK
+        sta pb_rd_bank
+        lda #<MEMB_BASE
+        sta zp_pb_rd_ptr
+        lda #>MEMB_BASE
+        sta zp_pb_rd_ptr+1
+        lda #0
+        sta pb_read
+        sta pb_read+1
+        sta pb_read+2
+        rts
+.endp
+
+; ----------------------------------------------------------------------------
+; vbxe_pb_write_chunk - Copy rx_buffer to VRAM page buffer
+; Input: zp_rx_len = number of bytes in rx_buffer
+; Pattern identical to vbxe_img_write_chunk
+; ----------------------------------------------------------------------------
+.proc vbxe_pb_write_chunk
+        lda zp_rx_len
+        beq ?done
+
+        sei
+        lda pb_wr_bank
+        ora #$80
+        sta zp_memb_shadow     ; shadow FIRST (VBI is NMI!)
+        ldy #VBXE_MEMAC_B
+        sta (zp_vbxe_base),y
+
+        ldx #0
+?lp     ldy #0
+        lda rx_buffer,x
+        sta (zp_pb_wr_ptr),y
+        inc zp_pb_wr_ptr
+        bne ?nc
+        inc zp_pb_wr_ptr+1
+        lda zp_pb_wr_ptr+1
+        cmp #$80
+        bne ?nc
+        lda #$40
+        sta zp_pb_wr_ptr+1
+        inc pb_wr_bank
+        lda pb_wr_bank
+        ora #$80
+        sta zp_memb_shadow     ; shadow FIRST
+        ldy #VBXE_MEMAC_B
+        sta (zp_vbxe_base),y
+?nc     inx
+        cpx zp_rx_len
+        bne ?lp
+        memb_off
+        cli
+?done   rts
+.endp
+
+; ----------------------------------------------------------------------------
+; vbxe_pb_read_chunk - Copy VRAM page buffer to rx_buffer
+; Input: A = number of bytes to read (max 255)
+; Output: zp_rx_len = bytes read, rx_buffer filled
+; ----------------------------------------------------------------------------
+.proc vbxe_pb_read_chunk
+        sta zp_rx_len
+        beq ?done
+
+        sei
+        lda pb_rd_bank
+        ora #$80
+        sta zp_memb_shadow     ; shadow FIRST (VBI is NMI!)
+        ldy #VBXE_MEMAC_B
+        sta (zp_vbxe_base),y
+
+        ldx #0
+?lp     ldy #0
+        lda (zp_pb_rd_ptr),y
+        sta rx_buffer,x
+        inc zp_pb_rd_ptr
+        bne ?nc
+        inc zp_pb_rd_ptr+1
+        lda zp_pb_rd_ptr+1
+        cmp #$80
+        bne ?nc
+        lda #$40
+        sta zp_pb_rd_ptr+1
+        inc pb_rd_bank
+        lda pb_rd_bank
+        ora #$80
+        sta zp_memb_shadow     ; shadow FIRST
+        ldy #VBXE_MEMAC_B
+        sta (zp_vbxe_base),y
+?nc     inx
+        cpx zp_rx_len
+        bne ?lp
+        memb_off
+        cli
 ?done   rts
 .endp
 
@@ -255,23 +372,16 @@ img_wr_bank    dta b(0)        ; MEMAC B bank number
         lda img_vram+2
         sta MEMB_XDL,x
         inx
-        ; STEP = image width
-        lda img_width
+        ; STEP = 320 (NORMAL mode, converter always returns 320px wide)
+        lda #<320
         sta MEMB_XDL,x
         inx
-        lda img_width+1
+        lda #>320
         sta MEMB_XDL,x
         inx
-        ; OVATT: palette 1 + width bit
-        lda img_width+1
-        beq ?narrow
-        lda img_width
-        cmp #<320
-        bcc ?narrow
-        lda #$11               ; palette 1 + NORMAL (320px)
-        jmp ?ovatt
-?narrow lda #$10               ; palette 1 + NARROW (<=256px)
-?ovatt  sta MEMB_XDL,x
+        ; OVATT: palette 1 + NORMAL
+        lda #$11
+        sta MEMB_XDL,x
         inx
         ; Priority
         lda #$FF
@@ -363,12 +473,17 @@ img_wr_bank    dta b(0)        ; MEMAC B bank number
 img_remaining dta b(0)
 .endp
 
+
 ; ----------------------------------------------------------------------------
 ; vbxe_img_hide - Restore text-only XDL
 ; ----------------------------------------------------------------------------
 .proc vbxe_img_hide
         lda #0
         sta img_active
+        ; Wait for VBI to avoid XDL tearing
+        lda RTCLOK+2
+?wv     cmp RTCLOK+2
+        beq ?wv
         memb_on 0
         jsr setup_xdl
         memb_off

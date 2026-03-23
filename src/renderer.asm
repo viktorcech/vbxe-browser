@@ -95,9 +95,11 @@
 ?lp     cpx zp_word_len
         beq ?clr
         lda word_buf,x
-        stx zp_tmp2
+        txa
+        pha
         jsr render_out_char
-        ldx zp_tmp2
+        pla
+        tax
         inx
         bne ?lp
 
@@ -215,7 +217,9 @@
         sta zp_mouse_btn
         ; Check if cursor is on a link
         jsr mouse_check_link
-        bcs ?click_ignore      ; not on link — do nothing
+        bcc ?is_link
+        jmp ?click_ignore      ; not on link — do nothing
+?is_link
 
         ; Link found — check if it's an image link
         sta rpp_link_num
@@ -223,11 +227,15 @@
         ldy #0
         lda (zp_tmp_ptr),y
         cmp #'I'
-        bne ?normal_click
+        beq ?chk_colon
+        jmp ?normal_click
+?chk_colon
         iny
         lda (zp_tmp_ptr),y
         cmp #':'
-        bne ?normal_click
+        beq ?is_img
+        jmp ?normal_click
+?is_img
 
         ; Image link: fetch image and return to --More--
         jsr mouse_hide_cursor
@@ -248,16 +256,62 @@
         bne ?icp
         lda #0
         sta img_src_buf,x
-?icpd   jsr img_fetch_single
-        ; img_fetch used N2: for image, N1: still open with page.
-        ; rx_buffer was overwritten by image data — clear rx_len
-        ; so html_process_chunk stops iterating corrupted buffer.
-        lda #0
-        sta zp_rx_len
-        sta http_remain_lo     ; force fresh STATUS on N1:
-        sta http_remain_hi
-        ; Return to --More-- loop — page download continues
+?icpd   ; Save ALL parser+renderer state before image fetch
+        ; (img_fetch_single may clobber ZP vars via status_msg, SIO, etc.)
+        lda chunk_idx
+        sta rpp_saved_cidx
+        lda zp_rx_len
+        sta rpp_saved_rxlen
+        ldx #0
+?sv     lda zp_cur_attr,x      ; save $84-$92 (15 bytes)
+        sta rpp_state_buf,x
+        inx
+        cpx #15
+        bne ?sv
+        lda zp_cur_attr
+        sta rpp_saved_attr
+        lda in_quotes
+        sta rpp_saved_quotes
+        lda is_closing
+        sta rpp_saved_closing
+
+        jsr img_fetch_single
+
+        ; Restore parser+renderer state
+        ldx #0
+?rs     lda rpp_state_buf,x    ; restore $84-$92
+        sta zp_cur_attr,x
+        inx
+        cpx #15
+        bne ?rs
+        lda rpp_saved_quotes
+        sta in_quotes
+        lda rpp_saved_closing
+        sta is_closing
+
+        ; rx_buffer destroyed by img_fetch — rewind VRAM and re-read chunk
+        ; Restore VRAM read pointer to start of current chunk
+        lda http_render.pb_rd_save_bank
+        sta pb_rd_bank
+        lda http_render.pb_rd_save_lo
+        sta zp_pb_rd_ptr
+        lda http_render.pb_rd_save_hi
+        sta zp_pb_rd_ptr+1
+        ; Re-read same chunk from VRAM into rx_buffer
+        lda rpp_saved_rxlen
+        jsr vbxe_pb_read_chunk
+        ; Restore chunk position — parser continues exactly where it left off
+        lda rpp_saved_cidx
+        sta chunk_idx
+        ; Restore attr (status_msg clobbered it)
+        lda rpp_saved_attr
+        sta zp_cur_attr
+        ; zp_rx_len restored by pb_read_chunk
+        ; Return to --More-- loop — page render continues from VRAM
         status_msg COL_YELLOW, m_more
+        ; Re-restore attr after status_msg clobbered it again
+        lda rpp_saved_attr
+        sta zp_cur_attr
         lda #0
         sta zp_mouse_btn
         jmp ?wait
@@ -341,7 +395,13 @@
 m_more    dta c' -- More -- (Spc/H/Q)',0
 m_skipping dta c' Skipping to heading...',0
 m_loading dta c' Loading...',0
-rpp_link_num dta 0
+rpp_link_num    dta 0
+rpp_saved_cidx  dta 0
+rpp_saved_rxlen dta 0
+rpp_saved_attr  dta 0
+rpp_saved_quotes dta 0
+rpp_saved_closing dta 0
+rpp_state_buf   .ds 15             ; save $84-$92 (cur_attr through entity_idx)
 .endp
 
 ; ----------------------------------------------------------------------------
@@ -351,9 +411,11 @@ rpp_link_num dta 0
         ldx zp_indent
         beq ?done
 ?lp     lda #CH_SPACE
-        stx zp_tmp2
+        txa
+        pha
         jsr render_out_char
-        ldx zp_tmp2
+        pla
+        tax
         dex
         bne ?lp
 ?done   rts
@@ -364,14 +426,6 @@ rpp_link_num dta 0
 ; ----------------------------------------------------------------------------
 .proc render_set_attr
         sta zp_cur_attr
-        rts
-.endp
-
-; ----------------------------------------------------------------------------
-; render_link_prefix - Output [N] for link
-; ----------------------------------------------------------------------------
-.proc render_link_prefix
-        ; Link numbers removed — detection is via attr-encoded palette
         rts
 .endp
 
@@ -452,9 +506,11 @@ rpp_link_num dta 0
         sta zp_cur_attr
         ldx #SCR_COLS
 ?lp     lda #'-'
-        stx zp_tmp2
+        txa
+        pha
         jsr render_out_char
-        ldx zp_tmp2
+        pla
+        tax
         dex
         bne ?lp
         lda #ATTR_NORMAL

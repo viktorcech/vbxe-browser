@@ -72,6 +72,8 @@ VRAM_PATTERN   = $1380  ; Fill pattern (2 bytes)
 VRAM_XDL       = $1400  ; XDL
 VRAM_FONT      = $2000  ; Font: 256*8 = 2048 bytes
 VRAM_FONT_INV  = $2800  ; Inverse font
+VRAM_PAGE_BUF  = $14000 ; Page buffer for HTML download (bank 5+)
+PAGE_BUF_BANK  = 5      ; VRAM $14000 >> 14 = 5
 
 ; CPU addresses when MEMAC B bank 0 active ($4000 + VRAM offset)
 MEMB_BASE      = $4000
@@ -90,11 +92,11 @@ CHBASE_VAL     = 4      ; VRAM_FONT / $800
 
 ; Content area (derived from SCR_ROWS)
 CONTENT_TOP    = 2
-CONTENT_BOT    = SCR_ROWS - 2
-CONTENT_ROWS   = SCR_ROWS - 3
+CONTENT_BOT    = SCR_ROWS - 3
+CONTENT_ROWS   = SCR_ROWS - 4
 URL_ROW        = 0
 TITLE_ROW      = 1
-STATUS_ROW     = SCR_ROWS - 1
+STATUS_ROW     = SCR_ROWS - 2
 
 ; ----------------------------------------------------------------------------
 ; Color Palette Indices (overlay palette 1)
@@ -138,6 +140,7 @@ NMIEN      = $D40E
 WSYNC      = $D40A
 SIOV       = $E459
 COLDSV     = $E477
+PAL        = $D014         ; PAL/NTSC flag ($01=PAL, other=NTSC)
 
 ; SIO DCB
 DDEVIC     = $0300
@@ -212,6 +215,10 @@ zp_img_ptr     = $AB   ; 2 bytes - image write pointer (MEMAC B window)
 zp_memb_shadow = $AD   ; MEMAC B shadow for NMI-safe restore
 zp_tirq_saved  = $AE   ; Timer IRQ: saved shadow value
 zp_vbi_saved   = $AF   ; VBI: saved shadow value
+
+; Page buffer pointers ($B8-$BB, after mouse $B0-$B7)
+zp_pb_wr_ptr   = $B8   ; 2B write pointer (MEMAC B window $4000-$7FFF)
+zp_pb_rd_ptr   = $BA   ; 2B read pointer
 
 ; ----------------------------------------------------------------------------
 ; Macros

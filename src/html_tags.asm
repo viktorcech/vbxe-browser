@@ -397,7 +397,6 @@ m_tbl_sep dta c' | ',0
         clc
         adc #ATTR_LINK_BASE    ; attr = $20 + link_num
         jsr render_set_attr
-        jsr render_link_prefix
         lda zp_link_num
         cmp #MAX_LINKS
         bcs ?no_inc            ; don't increment past MAX_LINKS
@@ -642,7 +641,6 @@ IMG_SRC_SIZE = 256
         clc
         adc #ATTR_LINK_BASE
         jsr render_set_attr
-        jsr render_link_prefix     ; shows [N]
         lda #<m_imgtxt
         ldx #>m_imgtxt
         jsr render_string          ; shows "IMG"

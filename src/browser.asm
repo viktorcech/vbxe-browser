@@ -23,6 +23,15 @@
         sta SDMCTL
         sei
 
+        ; PAL/NTSC detection
+        lda PAL
+        cmp #$01
+        beq ?is_pal
+        lda #0               ; NTSC
+        beq ?store
+?is_pal lda #1               ; PAL
+?store  sta is_pal
+
         jsr vbxe_detect
         bcc no_vbxe
 
@@ -42,9 +51,28 @@
 no_vbxe cli
         lda #$22
         sta SDMCTL
-        ; Can't do much without VBXE, just cold start
+        ; Show error message via E: device (CIO IOCB #0)
+        ldx #0               ; IOCB #0 = E: (editor)
+        lda #$09             ; PUT RECORD command
+        sta ICCOM
+        lda #<msg_no_vbxe
+        sta ICBAL
+        lda #>msg_no_vbxe
+        sta ICBAH
+        lda #18              ; string length
+        sta ICBLL
+        lda #0
+        sta ICBLH
+        jsr CIOV
+        ; Wait for keypress then cold start
+?wk     lda CH
+        cmp #KEY_NONE
+        beq ?wk
         jmp (COLDSV)
 .endp
+
+is_pal  dta b(1)             ; 1=PAL, 0=NTSC (default PAL)
+
 
 ; show_welcome is in title.asm
 

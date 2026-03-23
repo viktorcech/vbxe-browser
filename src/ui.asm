@@ -382,15 +382,6 @@ m_load  dta c' Loading...',0
 .endp
 
 ; ----------------------------------------------------------------------------
-; ui_status_img_loading - Show "Loading image..." on status bar
-; ----------------------------------------------------------------------------
-.proc ui_status_img_loading
-        status_msg COL_YELLOW, m_iload
-        rts
-m_iload dta c' Loading image...',0
-.endp
-
-; ----------------------------------------------------------------------------
 ; ui_status_progress - Show "Loading... NNkB" on status bar
 ; Input: http_bytes_lo/hi = total bytes downloaded (16-bit)
 ; ----------------------------------------------------------------------------

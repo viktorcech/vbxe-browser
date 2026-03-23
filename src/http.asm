@@ -4,14 +4,16 @@
 ; ============================================================================
 
 ; ----------------------------------------------------------------------------
-; http_get - Fetch URL, process response through HTML parser
+; http_download - Download URL into VRAM page buffer (Phase 1)
 ; Input: url_buffer, url_length set
-; Output: C=0 ok, C=1 error
+; Output: C=0 ok (pb_total set), C=1 error
+; After return: N1: is CLOSED, data is in VRAM page buffer
 ; ----------------------------------------------------------------------------
-.proc http_get
+.proc http_download
         lda #KEY_NONE
         sta CH                 ; clear any leftover keypress
         jsr ui_status_loading
+        jsr vbxe_pb_init_write
         jsr fn_open
         bcc ?opened
         jmp ?open_err
@@ -20,53 +22,41 @@
         sta http_idle_cnt
         sta http_bytes_lo
         sta http_bytes_hi
-        sta http_remain_lo     ; remaining bytes from last STATUS
+        sta http_remain_lo
         sta http_remain_hi
 
-        ; --- Main read loop ---
-        ; Optimization: after STATUS reports N bytes, read multiple
-        ; 255-byte chunks without re-calling STATUS. Saves ~7ms per
-        ; skipped STATUS call (significant for large pages).
-
-?rdlp   ; Check if we still have remaining bytes from previous STATUS
-        lda http_remain_lo
+        ; --- Main download loop ---
+        ; Read from network → rx_buffer → VRAM page buffer
+?rdlp   lda http_remain_lo
         ora http_remain_hi
-        bne ?do_read           ; skip STATUS, read directly
+        bne ?do_read
 
-        ; No remaining - need STATUS to check state
         jsr fn_status
         bcc ?st_ok
         jmp ?rd_err
 ?st_ok
-        ; Check error byte from FujiNet status
         lda zp_fn_error
-        beq ?no_err            ; 0 = no error
+        beq ?no_err
         cmp #136
-        beq ?jdone             ; 136 ($88) = normal EOF
-        bmi ?jrd_err           ; >= 128 = fatal network error
-        jmp ?no_err            ; 1-127 = not fatal
+        beq ?jdone
+        bmi ?jrd_err
+        jmp ?no_err
 ?jdone  jmp ?done
 ?jrd_err jmp ?rd_err
 ?no_err
-        ; Check bytes waiting FIRST (data may be buffered after disconnect)
         lda zp_fn_bytes_lo
         ora zp_fn_bytes_hi
         bne ?has_data
         jmp ?no_data
 ?has_data
-
-        ; Store remaining bytes from STATUS
         lda zp_fn_bytes_lo
         sta http_remain_lo
         lda zp_fn_bytes_hi
         sta http_remain_hi
 
 ?do_read
-        ; Data available - reset idle counter
         lda #0
         sta http_idle_cnt
-
-        ; Set fn_read input from remaining (fn_read caps at 255)
         lda http_remain_lo
         sta zp_fn_bytes_lo
         lda http_remain_hi
@@ -74,13 +64,11 @@
 
         jsr fn_read
         bcc ?rd_ok
-        ; Read failed - clear remaining, report error
         lda #0
         sta http_remain_lo
         sta http_remain_hi
         jmp ?rd_err
 ?rd_ok
-        ; Subtract read bytes from remaining
         lda http_remain_lo
         sec
         sbc zp_rx_len
@@ -92,7 +80,7 @@
         lda zp_rx_len
         beq ?rdlp
 
-        ; Track downloaded bytes and update status bar
+        ; Track bytes for progress display
         lda http_bytes_lo
         clc
         adc zp_rx_len
@@ -101,69 +89,68 @@
         inc http_bytes_hi
 ?no_ov  jsr ui_status_progress
 
-        ; Download limit: 255kB (counter resets at <body>)
-        ; User can abort anytime with a key press
+        ; Write rx_buffer → VRAM page buffer
+        jsr vbxe_pb_write_chunk
+
+        ; Update 24-bit total
+        clc
+        lda pb_total
+        adc zp_rx_len
+        sta pb_total
+        bcc ?nc_t
+        inc pb_total+1
+        bne ?nc_t
+        inc pb_total+2
+?nc_t
+        ; 255kB download limit
         lda http_bytes_hi
         cmp #255
-        bcc ?past_limit
-        jmp ?done
-?past_limit
+        bcs ?done
 
-        jsr html_process_chunk
-        lda page_abort
-        bne ?done              ; user aborted with Q
-
-        ; Check keyboard abort during active download
-        ; (not just idle - user must be able to cancel anytime)
+        ; Check keyboard abort
         lda CH
         cmp #KEY_NONE
         bne ?chk_key
         jmp ?rdlp
 ?chk_key
-        cmp #KEY_SPACE         ; ignore Space auto-repeat
+        cmp #KEY_SPACE
         beq ?clr_dl
-        cmp #KEY_RETURN        ; ignore Return auto-repeat
+        cmp #KEY_RETURN
         beq ?clr_dl
-        lda #1
-        sta page_abort
-        jmp ?done
+        jmp ?done              ; any other key = stop download
 ?clr_dl lda #KEY_NONE
         sta CH
         jmp ?rdlp
 
 ?no_data
-        ; No bytes waiting - check if still connected
         lda zp_fn_connected
-        beq ?done              ; not connected + no data = truly done
+        beq ?done
 
-        ; Check keyboard only when idle (no data flowing)
         lda CH
         cmp #KEY_NONE
         beq ?no_key
-        cmp #KEY_SPACE         ; ignore Space auto-repeat from --More--
+        cmp #KEY_SPACE
         beq ?clr_sp
-        cmp #KEY_RETURN        ; ignore Return auto-repeat too
+        cmp #KEY_RETURN
         beq ?clr_sp
-        ; Real key pressed: abort download, keep key in CH
-        lda #1
-        sta page_abort
         jmp ?done
 ?clr_sp lda #KEY_NONE
-        sta CH                 ; clear auto-repeat Space/Return
+        sta CH
 ?no_key
-        ; Idle timeout: ~2.4 sec (120 iterations * 1 frame * 20ms PAL)
         inc http_idle_cnt
         lda http_idle_cnt
-        cmp #120
-        bcs ?done              ; timeout = done (server keep-alive)
+        ldx is_pal
+        bne ?pal_to
+        cmp #250               ; NTSC: 250 frames ≈ 4.2s (longer for buffered download)
+        bcs ?done
+        bcc ?wait
+?pal_to cmp #240               ; PAL: 240 frames ≈ 4.8s
+        bcs ?done
 
-        ; Wait 1 frame (faster idle response)
-        wait_frames 1
+?wait   wait_frames 1
         jmp ?rdlp
 
 ?done   jsr fn_close
-        jsr html_flush
-        jsr ui_status_done
         clc
         rts
 
@@ -177,10 +164,9 @@
         rts
 
 ?rd_err lda zp_fn_error
-        sta m_rderr_code       ; save error code for display
+        sta m_rderr_code
         jsr fn_close
         jsr ui_status_error
-        ; Format error code into message
         lda m_rderr_code
         lsr
         lsr
@@ -216,9 +202,81 @@ http_idle_cnt dta b(0)
 ; Global so html_tags.asm can reset them at <body>
 http_bytes_lo dta b(0)
 http_bytes_hi dta b(0)
-; Global so render_page_pause can reset after img_fetch
+; Used internally by http_download
 http_remain_lo dta b(0)
 http_remain_hi dta b(0)
+
+; ----------------------------------------------------------------------------
+; http_render - Render HTML from VRAM page buffer (Phase 2)
+; Input: pb_total set by http_download
+; No network connection needed - reads from VRAM
+; ----------------------------------------------------------------------------
+.proc http_render
+        jsr vbxe_pb_init_read
+
+?loop   ; Check if all data read: pb_read == pb_total?
+        lda pb_read+2
+        cmp pb_total+2
+        bne ?more
+        lda pb_read+1
+        cmp pb_total+1
+        bne ?more
+        lda pb_read
+        cmp pb_total
+        beq ?done
+
+?more   ; Determine chunk size: min(255, bytes_left)
+        ; If high bytes differ, >255 bytes remain → read 255
+        lda pb_total+2
+        cmp pb_read+2
+        bne ?full
+        lda pb_total+1
+        cmp pb_read+1
+        bne ?full
+        ; Only low bytes differ
+        lda pb_total
+        sec
+        sbc pb_read
+        jmp ?read
+
+?full   lda #255
+
+?read   ; Save VRAM read state before chunk (for rewind after img_fetch)
+        sta pb_chunk_size
+        lda pb_rd_bank
+        sta pb_rd_save_bank
+        lda zp_pb_rd_ptr
+        sta pb_rd_save_lo
+        lda zp_pb_rd_ptr+1
+        sta pb_rd_save_hi
+
+        lda pb_chunk_size
+        jsr vbxe_pb_read_chunk ; A→rx_buffer, sets zp_rx_len
+        jsr html_process_chunk
+
+        ; Update 24-bit read counter (use saved chunk size, not zp_rx_len
+        ; which may have been reset to 0 by img_fetch during render)
+        clc
+        lda pb_read
+        adc pb_chunk_size
+        sta pb_read
+        bcc ?nc1
+        inc pb_read+1
+        bne ?nc1
+        inc pb_read+2
+?nc1
+        lda page_abort
+        bne ?done
+        jmp ?loop
+
+?done   jsr html_flush
+        rts
+
+pb_chunk_size    dta b(0)
+pb_rd_save_bank  dta b(0)
+pb_rd_save_lo    dta b(0)
+pb_rd_save_hi    dta b(0)
+.endp
 
 ; ----------------------------------------------------------------------------
 ; http_set_url - Copy URL string to url_buffer (A=lo, X=hi)
@@ -285,8 +343,12 @@ http_remain_hi dta b(0)
         jsr ui_clear_content
         jsr ui_show_url
 
-        jsr http_get
-        ; Show end-of-page status on status bar
+        jsr http_download      ; Phase 1: network → VRAM buffer
+        bcs ?skip_render       ; error → skip render
+        lda #0
+        sta page_abort         ; reset abort flag for render phase
+        jsr http_render        ; Phase 2: VRAM buffer → parser
+?skip_render
         jsr ui_status_end
         rts
 .endp
