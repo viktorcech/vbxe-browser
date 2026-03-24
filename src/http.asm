@@ -192,7 +192,7 @@
         adc #'0'
         rts
 
-m_operr dta c'Connection failed',0
+m_operr dta c'Connection failed - check URL (press key)',0
 m_rderr dta c'Read err $'
 m_rderr_hex dta c'00',0
 m_rderr_code dta b(0)
@@ -226,20 +226,26 @@ http_remain_hi dta b(0)
         beq ?done
 
 ?more   ; Determine chunk size: min(255, bytes_left)
-        ; If high bytes differ, >255 bytes remain → read 255
-        lda pb_total+2
-        cmp pb_read+2
-        bne ?full
-        lda pb_total+1
-        cmp pb_read+1
-        bne ?full
-        ; Only low bytes differ
+        ; 24-bit subtraction: remaining = pb_total - pb_read
         lda pb_total
         sec
         sbc pb_read
+        pha                    ; save low byte of remaining
+        lda pb_total+1
+        sbc pb_read+1
+        tax                    ; X = middle byte of remaining
+        lda pb_total+2
+        sbc pb_read+2          ; A = high byte of remaining
+        ; If high or middle byte > 0, remaining > 255 -> cap at 255
+        bne ?full              ; high byte > 0
+        txa
+        bne ?full              ; middle byte > 0
+        ; Remaining fits in low byte (0-255)
+        pla                    ; A = exact remaining count
         jmp ?read
 
-?full   lda #255
+?full   pla                    ; discard saved low byte
+        lda #255               ; cap at 255
 
 ?read   ; Save VRAM read state before chunk (for rewind after img_fetch)
         sta pb_chunk_size
@@ -345,10 +351,39 @@ pb_rd_save_hi    dta b(0)
 
         jsr http_download      ; Phase 1: network → VRAM buffer
         bcs ?skip_render       ; error → skip render
+
+        ; Check if any data was received
+        lda pb_total
+        ora pb_total+1
+        ora pb_total+2
+        bne ?has_data
+        ; No data → show error
+        lda #<m_nodata
+        ldx #>m_nodata
+        jsr ui_show_error
+        jmp ?skip_render
+
+?has_data
         lda #0
         sta page_abort         ; reset abort flag for render phase
         jsr http_render        ; Phase 2: VRAM buffer → parser
+
+        ; If user pressed Q during render, return to welcome screen
+        ; But if pending_link is set, it's a link click — not quit!
+        lda page_abort
+        beq ?skip_render       ; no abort → show "End" status normally
+        lda pending_link
+        cmp #$FF
+        bne ?skip_render       ; link click → let ui_main_loop follow it
+        jsr fn_close
+        jsr html_reset
+        jsr render_reset
+        jsr show_welcome
+        rts
+
 ?skip_render
         jsr ui_status_end
         rts
+
+m_nodata dta c'Empty response - check URL (press key)',0
 .endp

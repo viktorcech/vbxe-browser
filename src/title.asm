@@ -18,7 +18,7 @@
 
         ; === Version (row 3, centered) ===
         lda #3
-        ldx #28
+        ldx #msg_welcome_col
         jsr vbxe_setpos
         lda #ATTR_NORMAL
         jsr vbxe_setattr
@@ -127,7 +127,7 @@
 
         ; === Author (row 23, centered) ===
         lda #23
-        ldx #20
+        ldx #15
         jsr vbxe_setpos
         lda #ATTR_DECOR
         jsr vbxe_setattr

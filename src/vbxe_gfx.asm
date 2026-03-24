@@ -487,6 +487,7 @@ img_remaining dta b(0)
         memb_on 0
         jsr setup_xdl
         memb_off
+        jsr setup_palette
         rts
 .endp
 

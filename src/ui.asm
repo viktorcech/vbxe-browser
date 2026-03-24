@@ -23,25 +23,11 @@
         ldx #>m_urlp
         jsr vbxe_print
 
-        ; Status bar (row 23, gray)
-        lda #STATUS_ROW
-        ldx #COL_GRAY
-        jsr vbxe_fill_row
-        lda #STATUS_ROW
-        ldx #0
-        jsr vbxe_setpos
-        lda #COL_GRAY
-        jsr vbxe_setattr
-        lda #<m_help
-        ldx #>m_help
-        jsr vbxe_print
-
         lda #ATTR_NORMAL
         jsr vbxe_setattr
         rts
 
 m_urlp  dta c'URL: ',0
-m_help  dta c' Click:Link  U:URL  B:Back  Q:Quit',0
 .endp
 
 ; ----------------------------------------------------------------------------
@@ -160,6 +146,11 @@ m_help  dta c' Click:Link  U:URL  B:Back  Q:Quit',0
 ; Output: url_buffer set, C=0 ok, C=1 cancelled
 ; ----------------------------------------------------------------------------
 .proc ui_url_input
+        ; Clear status bar during URL input (keys don't apply here)
+        lda #STATUS_ROW
+        ldx #COL_BLACK
+        jsr vbxe_fill_row
+
         lda #URL_ROW
         ldx #COL_GREEN
         jsr vbxe_fill_row
@@ -247,6 +238,7 @@ m_go    dta c'Go to: ',0
         lda #0
         sta img_src_buf,x
 ?icpd   jsr img_fetch_single
+        jsr ui_status_end      ; restore "-- End --" bar after image view
         rts
 
 ?normal_link
@@ -363,8 +355,10 @@ m_badlnk dta c'Invalid link number',0
 
         jsr kbd_get
 
-        ; Restore status bar
-        status_msg COL_GRAY, ui_init.m_help
+        ; Clear status bar after error dismiss
+        lda #STATUS_ROW
+        ldx #COL_BLACK
+        jsr vbxe_fill_row
         rts
 
 m_err   dta c'ERROR: ',0
@@ -469,7 +463,10 @@ prog_last_kb dta b($FF)
 ; ui_status_done - Restore status bar after loading
 ; ----------------------------------------------------------------------------
 .proc ui_status_done
-        status_msg COL_GRAY, ui_init.m_help
+        ; Clear status bar
+        lda #STATUS_ROW
+        ldx #COL_BLACK
+        jsr vbxe_fill_row
         lda title_len
         beq ?no
         jsr ui_show_title
@@ -480,7 +477,7 @@ prog_last_kb dta b($FF)
 ; ui_status_end - Show end-of-page indicator on status bar
 ; ----------------------------------------------------------------------------
 .proc ui_status_end
-        status_msg COL_GRAY, m_end
+        status_msg COL_YELLOW, m_end
         lda title_len
         beq ?no
         jsr ui_show_title

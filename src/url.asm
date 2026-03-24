@@ -9,7 +9,10 @@
         ; Check if url_buffer starts with "N:" (already has FujiNet prefix)
         lda url_buffer
         cmp #'N'
+        beq ?chkcolon
+        cmp #'n'
         bne ?chkhttp
+?chkcolon
         lda url_buffer+1
         cmp #':'
         beq ?ok

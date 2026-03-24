@@ -57,9 +57,10 @@ STUB_VBI_EXIT   = STUB_BASE + 44
 .proc mouse_init
         lda #40
         sta zp_mouse_x
-        sta zp_mouse_prev_x
         lda #12
         sta zp_mouse_y
+        lda #$FF
+        sta zp_mouse_prev_x    ; $FF = invalid, skip first restore
         sta zp_mouse_prev_y
         lda #0
         sta zp_mouse_btn
@@ -407,10 +408,15 @@ mouse_old_y     dta 0          ; old Y bits, pre-shifted <<2
 ; mouse_hide_cursor - Remove cursor before screen updates
 ; ----------------------------------------------------------------------------
 .proc mouse_hide_cursor
+        lda zp_mouse_prev_x
+        cmp #$FF
+        beq ?done
         lda zp_mouse_prev_y
         ldx zp_mouse_prev_x
         jsr mouse_restore_char
-        rts
+        lda #$FF
+        sta zp_mouse_prev_x    ; mark as restored, prevent double restore
+?done   rts
 .endp
 
 ; ----------------------------------------------------------------------------

@@ -8,6 +8,7 @@ img_hdr_w   dta a(0)
 img_hdr_h   dta b(0)
 img_pal_cnt dta a(0)
 img_timeout dta b(0)
+img_pal_leftover dta b(0)  ; leftover pixel bytes after palette read
 img_saved_key dta b($FF)     ; saved key from abort ($FF=none)
 
 ; Max retries before timeout (each retry ~120ms = ~40 retries = ~5 sec)
@@ -182,16 +183,38 @@ img_pix_cnt  dta b(0),b(0),b(0)  ; 24-bit pixel byte counter
 
 ?chk    lda img_pal_cnt+1
         cmp #3
-        bcc ?lp
-?done   clc
-        rts
+        bcs ?done
+        jmp ?lp
 
 ?wait   dec img_timeout
         beq ?err
         wait_frames 6
         jmp ?lp
 
-?err    sec
+?err    lda #0
+        sta img_pal_leftover   ; no leftover on error
+        sec
+        rts
+
+?done   ; Palette complete — save any leftover pixel bytes in rx_buffer
+        iny                    ; Y was on last palette byte, advance past it
+        cpy zp_rx_len
+        bcs ?no_left           ; no leftover pixels in this chunk
+        ; Shift rx_buffer[Y..rx_len-1] to rx_buffer[0..]
+        ldx #0
+?shl    lda rx_buffer,y
+        sta rx_buffer,x
+        iny
+        inx
+        cpy zp_rx_len
+        bcc ?shl
+        stx img_pal_leftover   ; save leftover count
+        clc
+        rts
+?no_left
+        lda #0
+        sta img_pal_leftover   ; no leftover pixels
+        clc
         rts
 .endp
 
@@ -383,6 +406,12 @@ img_pix_cnt  dta b(0),b(0),b(0)  ; 24-bit pixel byte counter
 
         ; Init write pointer
         jsr vbxe_img_begin_write
+
+        ; Write any leftover pixel bytes from palette read
+        ; (palette may end mid-chunk, remaining bytes are pixel data)
+        lda img_pal_leftover
+        sta zp_rx_len
+        jsr vbxe_img_write_chunk   ; no-op if zp_rx_len=0
 
         ; Read pixels BEFORE setting palette (palette overwrites link colors)
         jsr img_read_pixels

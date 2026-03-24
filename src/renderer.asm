@@ -95,11 +95,9 @@
 ?lp     cpx zp_word_len
         beq ?clr
         lda word_buf,x
-        txa
-        pha
-        jsr render_out_char
-        pla
-        tax
+        stx zp_tmp3            ; save index
+        jsr render_out_char    ; A = character
+        ldx zp_tmp3            ; restore index
         inx
         bne ?lp
 
@@ -392,7 +390,7 @@
         sec
         rts
 
-m_more    dta c' -- More -- (Spc/H/Q)',0
+m_more    dta c' -- Next page: Spc  Skip: H  Quit: Q --',0
 m_skipping dta c' Skipping to heading...',0
 m_loading dta c' Loading...',0
 rpp_link_num    dta 0
@@ -411,11 +409,9 @@ rpp_state_buf   .ds 15             ; save $84-$92 (cur_attr through entity_idx)
         ldx zp_indent
         beq ?done
 ?lp     lda #CH_SPACE
-        txa
-        pha
-        jsr render_out_char
-        pla
-        tax
+        stx zp_tmp3            ; save counter
+        jsr render_out_char    ; A = space
+        ldx zp_tmp3            ; restore counter
         dex
         bne ?lp
 ?done   rts
@@ -506,11 +502,9 @@ rpp_state_buf   .ds 15             ; save $84-$92 (cur_attr through entity_idx)
         sta zp_cur_attr
         ldx #SCR_COLS
 ?lp     lda #'-'
-        txa
-        pha
-        jsr render_out_char
-        pla
-        tax
+        stx zp_tmp3            ; save counter
+        jsr render_out_char    ; A = '-'
+        ldx zp_tmp3            ; restore counter
         dex
         bne ?lp
         lda #ATTR_NORMAL
