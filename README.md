@@ -6,7 +6,7 @@
 
 ## Status
 
-**Alpha 50** — early development, testing on real hardware. Help is welcome!
+**Alpha 55** — early development, testing on real hardware. Help is welcome!
 
 ## Requirements
 
@@ -15,6 +15,21 @@
 - [FujiNet](https://fujinet.online/) — WiFi multi-peripheral with N: device HTTP support
 - Atari ST mouse in joystick port 2
 - Emulator: [Altirra](https://www.virtualdub.org/altirra.html) with VBXE + FujiNet-PC
+
+## Running
+
+### From SpartaDOS X (recommended)
+
+The fastest way to run the browser on real hardware. [SpartaDOS X](https://atariwiki.org/wiki/Wiki.jsp?page=SpartaDOS%20X) with FujiNet uses hi-SIO for high-speed transfers over the SIO bus, so the ~10 KB XEX loads almost instantly from a TNFS share.
+
+1. Mount a TNFS share on FujiNet (via FujiNet Config or `FCONFIG.COM`)
+2. From SDX command line, run the XEX: `browser.xex`
+
+### From Altirra emulator
+
+1. System → Devices → Add → Video Board XE (VBXE)
+2. System → uncheck BASIC (important!)
+3. File → Boot Image → select `browser.xex`
 
 ## Features
 
@@ -25,28 +40,17 @@
 - **HTML entity decoding** — `&amp;` `&lt;` `&gt;` `&nbsp;` `&quot;` and numeric `&#NNN;`
 - **HTML comment support** — `<!-- -->` properly parsed and skipped
 - **UTF-8 filtering** — multi-byte sequences skipped gracefully
-- **Image viewing** — inline images shown as clickable `[N]IMG` links, fullscreen 256-color display (up to 320×192) via server-side converter, uses N2: device so page download continues after viewing
+- **Image viewing** — inline images shown as clickable `[N]IMG` links, fullscreen 256-color display (up to 320×192) via server-side converter
 - **Up to 64 links per page** with palette-encoded link detection, recycled on each page scroll
 - **Word wrapping** — intelligent wrapping at word boundaries with indentation support
 - **Skip to heading** — press H during `--More--` prompt to jump past navigation menus to next heading
 - **URL navigation** with address bar, auto-prefix (`N:http://`), and case normalization
 - **Relative URL resolution** — links and images resolved against base URL
 - **History** — back navigation with scroll position preservation (16 entries)
-- **Streaming download** — HTML parsed while downloading, progress shown in kB
+- **VRAM page buffer** — entire page downloaded to VRAM ($14000+), then rendered offline. N1: is free for image downloads during rendering
 - **Optimized HTTP** — skips redundant FujiNet STATUS calls during bulk transfer
 - **CRT overscan border** — 8-scanline top border ensures URL bar is visible on real TVs
-
-## Display
-
-The browser uses VBXE overlay text mode (TMON) for 80-column display:
-
-- **80×29** character grid (URL bar + title row + 26 content rows + status bar)
-- 8 colors: white (text), blue (links), orange/yellow (headings), green (URL bar), red (errors), gray (decorative/status)
-- Link detection via palette-encoded attributes ($20–$5F = 64 link slots, all rendered as blue)
-- Font from Atari ROM, remapped to ASCII layout in VBXE VRAM
-- 8-scanline OVOFF border at top for CRT overscan safety
-- Fullscreen image display via GMON overlay with 256-color palette
-- Title screen uses mixed GMON (gradient) + TMON (text) XDL
+- **Build timestamps** — welcome screen shows build date and time
 
 ## Controls
 
@@ -64,6 +68,13 @@ The browser uses VBXE overlay text mode (TMON) for 80-column display:
 Requires [MADS](https://github.com/tebe6502/Mad-Assembler) (Mad Assembler).
 
 ```bash
+./build.sh
+```
+
+The build script generates a build timestamp in `src/build_stamp.asm` and produces `bin/browser.xex`.
+
+Manual build:
+```bash
 mads src/browser.asm -o:bin/browser.xex -l:bin/browser.lab
 ```
 
@@ -76,9 +87,9 @@ mads src/browser.asm -o:bin/browser.xex -l:bin/browser.lab
 | `vbxe_detect.asm` | VBXE hardware detection (FX core version check) |
 | `vbxe_init.asm` | VBXE initialization: XDL, font copy, blitter BCBs, palette (8 colors + gradient + 64 link colors) |
 | `vbxe_text.asm` | Text engine: putchar, print, cls, scroll, fill, VRAM read/write helpers |
-| `vbxe_gfx.asm` | Graphics: image VRAM alloc, pixel streaming, GMON XDL, fullscreen display, title gradient |
-| `fujinet.asm` | FujiNet N: device SIO layer (open, status, read, close), dual N1:/N2: support |
-| `http.asm` | HTTP GET workflow with optimized STATUS skipping, URL utilities |
+| `vbxe_gfx.asm` | Graphics: image VRAM alloc, pixel streaming, GMON XDL, fullscreen display, page buffer, title gradient |
+| `fujinet.asm` | FujiNet N: device SIO layer (open, status, read, close) |
+| `http.asm` | HTTP workflow: two-phase download (network→VRAM) + render (VRAM→parser) |
 | `url.asm` | URL normalization, prefix handling, base URL extraction, relative URL resolution |
 | `html_parser.asm` | Streaming byte-by-byte HTML parser (6 states: text, tag, entity, attr name/value, comment) |
 | `html_tags.asm` | Tag handlers (34 tags), attribute extraction (href, src), link/image storage |
@@ -86,24 +97,27 @@ mads src/browser.asm -o:bin/browser.xex -l:bin/browser.lab
 | `renderer.asm` | Text layout: word wrapping, indentation, pagination, `--More--` prompt, skip-to-heading |
 | `keyboard.asm` | Keyboard input via CIO K: device, line editing with backspace/escape |
 | `ui.asm` | UI: URL bar, status bar, main event loop, link following, error display |
-| `img_fetch.asm` | Image download, URL resolution, server-side converter integration |
+| `img_fetch.asm` | Image download: header/palette/pixel streaming, URL resolution, converter integration |
 | `history.asm` | URL history stack (16 entries with scroll position) |
 | `mouse.asm` | ST mouse driver: Timer 1 IRQ (quadrature sampling) + VBI (cursor), MEMAC B safe |
 | `title.asm` | Welcome screen layout and strings |
-| `data.asm` | Version string, default URL, large buffer allocations ($8800+) |
+| `data.asm` | Version string, large buffer allocations ($8800+) |
 
 ## Image Support
 
-Images on web pages appear as clickable `[N]IMG` links in blue. Clicking downloads the image through a server-side converter that resizes and converts to VBXE 256-color format (up to 320×192 pixels), then displays fullscreen. Press any key to return to the page. Image download uses FujiNet N2: device so the page connection (N1:) stays open — you can view images during page scrolling and continue browsing afterwards. Direct image URLs (.png, .jpg, .gif) are also supported.
+Images on web pages appear as clickable `[N]IMG` links in blue. Clicking downloads the image through a server-side converter that resizes and converts to VBXE 256-color format (up to 320×192 pixels), then displays fullscreen. Press any key to return to the page.
+
+The browser uses a two-phase architecture: the HTML page is first downloaded entirely into the VRAM page buffer, then N1: is closed. During rendering, image clicks reopen N1: for the converter — no second FujiNet connection needed. After viewing an image, the parser continues from the exact position in the buffered page.
 
 ## Architecture
 
-- **Code**: starts at $3000, critical MEMAC B routines stay below $4000
-- **VBXE VRAM**: screen buffer $0000, BCBs $1300, XDL $1400, font $2000, images/gradient $3000+
-- **MEMAC B window**: $4000–$7FFF maps to VBXE VRAM bank 0 when active
-- **FujiNet**: N1: for page download, N2: for image download (simultaneous connections)
+- **Code**: starts at $2000, critical MEMAC B routines stay below $4000
+- **VBXE VRAM**: screen $0000, BCBs $1300, XDL $1400, font $2000, images $3000+, page buffer $14000+
+- **MEMAC B window**: $4000–$7FFF maps to VBXE VRAM banks when active
+- **FujiNet**: single N1: device — page download closes before image fetch
+- **Page buffer**: HTML downloaded to VRAM ($14000+, bank 5+), rendered offline from VRAM
 - **Interrupts**: Timer 1 IRQ (mouse sampling ~985 Hz) + VBI (deferred cursor update), both with MEMAC B shadow register for safe nesting
-- **Buffers**: $8800+ (URL buffer, RX buffer, history stack, link URL table, image queue)
+- **Buffers**: $8800+ (URL buffer, RX buffer, history stack, link URL table, image palette)
 
 ## Credits
 
