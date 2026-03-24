@@ -34,11 +34,6 @@ m_urlp  dta c'URL: ',0
 ; ui_main_loop - Main keyboard event loop
 ; ----------------------------------------------------------------------------
 .proc ui_main_loop
-        ; Draw initial mouse cursor
-        lda zp_mouse_y
-        ldx zp_mouse_x
-        jsr mouse_invert_char
-
 ?loop   ; Wait one frame (vsync)
         lda RTCLOK+2
 ?vs     cmp RTCLOK+2
