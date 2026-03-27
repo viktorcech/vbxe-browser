@@ -383,8 +383,6 @@ pb_read        dta b(0),b(0),b(0)   ; 24-bit bytes read so far
         sbc img_height
         beq ?no_text           ; image fills screen exactly
         bmi ?no_text           ; image taller than screen (shouldn't happen)
-        sta img_remaining      ; save total remaining
-
         ; If remaining > 8, add OVOFF gap entry first
         cmp #9
         bcc ?status_only       ; remaining <= 8, just status bar
@@ -457,7 +455,6 @@ pb_read        dta b(0),b(0),b(0)   ; 24-bit bytes read so far
 ?done   memb_off
         rts
 
-img_remaining dta b(0)
 .endp
 
 

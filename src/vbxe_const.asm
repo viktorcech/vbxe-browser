@@ -171,9 +171,7 @@ zp_word_len    = $95
 zp_indent      = $96
 zp_in_link     = $97
 zp_link_num    = $98
-zp_in_heading  = $99
-zp_in_list     = $9A
-zp_in_bold     = $9B
+; $99-$9B free (removed: zp_in_heading, zp_in_list, zp_in_bold — write-only)
 zp_in_skip     = $9C
 zp_list_type   = $9D
 zp_list_item   = $9E
@@ -186,9 +184,9 @@ zp_rx_len      = $A3
 
 zp_cur_link    = $A4
 zp_scroll_pos  = $A5   ; 2 bytes
-zp_page_lines  = $A7   ; 2 bytes
+; $A7-$A8 free (removed: zp_page_lines — write-only)
 zp_hist_ptr    = $A9   ; 1 byte - history stack index (0-7)
-zp_fn_got_data = $AA
+; $AA free (removed: zp_fn_got_data — never referenced)
 zp_img_ptr     = $AB   ; 2 bytes - image write pointer (MEMAC B window)
 zp_memb_shadow = $AD   ; MEMAC B shadow for NMI-safe restore
 zp_tirq_saved  = $AE   ; Timer IRQ: saved shadow value
@@ -224,30 +222,19 @@ memb_off .macro
         .endm
 
 ; Show message on status bar: :1=color, :2=message address
+; Expands to subroutine call (9 bytes) instead of inline (31 bytes)
 status_msg .macro
-        lda #STATUS_ROW
-        ldx #:1
-        jsr vbxe_fill_row
-        lda #STATUS_ROW
-        ldx #0
-        jsr vbxe_setpos
-        lda #:1
-        jsr vbxe_setattr
+        ldy #:1
         lda #<:2
         ldx #>:2
-        jsr vbxe_print
-        lda #ATTR_NORMAL
-        jsr vbxe_setattr
+        jsr status_msg_sub
         .endm
 
 ; Wait N frames (RTCLOK-based delay): :1=frame count
+; Expands to subroutine call (5 bytes) instead of inline (13 bytes)
 wait_frames .macro
         ldx #:1
-?wfdly  lda RTCLOK+2
-?wfdw   cmp RTCLOK+2
-        beq ?wfdw
-        dex
-        bne ?wfdly
+        jsr wait_frames_sub
         .endm
 
 blit_start .macro

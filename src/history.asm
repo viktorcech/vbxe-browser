@@ -74,8 +74,6 @@ HIST_ENTRY_SZ  = 130   ; 128 bytes URL + 2 bytes scroll pos
         iny
         bne ?len
 ?gl     sty url_length
-        lda #0
-        sta url_length+1
         clc
         rts
 

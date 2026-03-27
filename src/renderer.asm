@@ -14,16 +14,11 @@
         sta zp_indent
         sta zp_in_link
         sta zp_link_num
-        sta zp_in_heading
-        sta zp_in_list
-        sta zp_in_bold
         sta last_was_sp
         sta title_len
         sta title_buf          ; null-terminate empty title
         sta zp_scroll_pos
         sta zp_scroll_pos+1
-        sta zp_page_lines
-        sta zp_page_lines+1
         sta page_abort
         sta skip_to_heading
 
@@ -169,10 +164,6 @@
         sta zp_link_num        ; reset links for new screen
         lda #$FF
         sta zp_tab_link        ; clear TAB selection on scroll
-
-        inc zp_page_lines
-        bne ?ok
-        inc zp_page_lines+1
 ?ok
 ?ok_ret rts
 
@@ -242,17 +233,8 @@
         lda rpp_link_num
         jsr calc_link_addr
         ldy #2                 ; skip "I:"
-        ldx #0
-?icp    lda (zp_tmp_ptr),y
-        sta img_src_buf,x
-        beq ?icpd
-        iny
-        inx
-        cpx #IMG_SRC_SIZE-1
-        bne ?icp
-        lda #0
-        sta img_src_buf,x
-?icpd   ; Check if download is still active (N1: open)
+        jsr copy_img_src
+        ; Check if download is still active (N1: open)
         lda dl_active
         beq ?img_now
         ; Download active — defer image fetch until after fn_close

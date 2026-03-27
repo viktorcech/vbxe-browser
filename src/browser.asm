@@ -23,14 +23,12 @@
         sta SDMCTL
         sei
 
-        ; PAL/NTSC detection
+        ; PAL/NTSC detection (PAL=$01, NTSC=$0F)
         lda PAL
         cmp #$01
-        beq ?is_pal
+        beq ?pal
         lda #0               ; NTSC
-        beq ?store
-?is_pal lda #1               ; PAL
-?store  sta is_pal
+?pal    sta is_pal
 
         jsr vbxe_detect
         bcc no_vbxe

@@ -34,7 +34,7 @@ row_addr_hi
 .proc vbxe_setpos
         sta zp_cursor_row
         stx zp_cursor_col
-        rts
+        jmp calc_scr_ptr       ; precalculate screen pointer
 .endp
 
 ; ----------------------------------------------------------------------------
@@ -52,18 +52,24 @@ row_addr_hi
 .proc vbxe_putchar
         pha
         memb_on 0
-        jsr calc_scr_ptr
 
         pla
         ldy #0
-        sta (zp_scr_ptr),y
+        sta (zp_scr_ptr),y    ; write char (ptr precalculated by setpos)
         iny
         lda zp_cur_attr
-        sta (zp_scr_ptr),y
+        sta (zp_scr_ptr),y    ; write attr
 
         memb_off
 
-        inc zp_cursor_col
+        ; Advance screen pointer by 2 (next char+attr position)
+        lda zp_scr_ptr
+        clc
+        adc #2
+        sta zp_scr_ptr
+        bcc ?nc
+        inc zp_scr_ptr+1
+?nc     inc zp_cursor_col
         lda zp_cursor_col
         cmp #SCR_COLS
         bcc ?done
@@ -73,11 +79,11 @@ row_addr_hi
         inc zp_cursor_row
         lda zp_cursor_row
         cmp #SCR_ROWS
-        bcc ?done
+        bcc ?recalc
 
         dec zp_cursor_row
         jsr vbxe_scroll_up
-
+?recalc jsr calc_scr_ptr       ; recalculate for new row
 ?done   rts
 .endp
 
@@ -218,6 +224,44 @@ row_addr_hi
 
 vbxe_rw_val dta 0
 vbxe_rw_off dta 0
+
+; ----------------------------------------------------------------------------
+; status_msg_sub - Show message on status bar (subroutine for status_msg macro)
+; Input: Y=color, A=msg_lo, X=msg_hi
+; ----------------------------------------------------------------------------
+.proc status_msg_sub
+        sta sm_msg
+        stx sm_msg+1
+        sty sm_color
+        lda #STATUS_ROW
+        ldx sm_color
+        jsr vbxe_fill_row
+        lda #STATUS_ROW
+        ldx #0
+        jsr vbxe_setpos
+        lda sm_color
+        jsr vbxe_setattr
+        lda sm_msg
+        ldx sm_msg+1
+        jsr vbxe_print
+        lda #ATTR_NORMAL
+        jmp vbxe_setattr
+sm_color dta b(0)
+sm_msg   dta a(0)
+.endp
+
+; ----------------------------------------------------------------------------
+; wait_frames_sub - Wait X frames (subroutine for wait_frames macro)
+; Input: X = number of frames to wait
+; ----------------------------------------------------------------------------
+.proc wait_frames_sub
+?wfdly  lda RTCLOK+2
+?wfdw   cmp RTCLOK+2
+        beq ?wfdw
+        dex
+        bne ?wfdly
+        rts
+.endp
 
 ; ----------------------------------------------------------------------------
 ; tab_find_next - Find next link on screen after current cursor position

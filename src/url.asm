@@ -48,7 +48,6 @@
         ldy url_length
         lda #0
         sta url_buffer,y
-        sta url_length+1
         jmp ?ok
 
 ?addFull
@@ -81,7 +80,6 @@
         ldy url_length
         lda #0
         sta url_buffer,y
-        sta url_length+1
 ?ok     rts
 
 ?prefix dta c'N:http://'
@@ -234,8 +232,6 @@
         lda #0
         sta url_buffer,y
 ?upd    sty url_length
-        lda #0
-        sta url_length+1
 ?done   rts
 
 ?root_rel
@@ -301,8 +297,6 @@
         lda #0
         sta url_buffer,y
 ?rr_upd sty url_length
-        lda #0
-        sta url_length+1
         rts
 
 ?rr_use_all
@@ -405,6 +399,96 @@
 .endp
 
 ; ----------------------------------------------------------------------------
+; http_check_binary_ext - Check if url_buffer ends with unsupported extension
+; Output: C=1 if binary (pdf, doc, zip, etc.), C=0 if ok
+; ----------------------------------------------------------------------------
+.proc http_check_binary_ext
+        ; Find last '.' in URL
+        ldy #0
+        ldx #$FF
+?scan   lda url_buffer,y
+        beq ?check
+        cmp #'.'
+        bne ?next
+        tya
+        tax
+?next   iny
+        bne ?scan
+?check  cpx #$FF
+        bne ?has_dot
+        clc
+        rts
+?has_dot
+        inx                    ; X = first char after dot
+        ; Store ext start position
+        stx zp_tmp1
+
+        ; Compare against blocked extensions table
+        ; Table format: null-terminated strings, double null = end
+        ldx #0
+?tloop  lda bin_ext_tbl,x
+        beq ?no                ; double null = end of table
+        ldy zp_tmp1           ; Y = url ext start
+?tcmp   lda bin_ext_tbl,x
+        beq ?tend              ; end of table entry
+        pha
+        lda url_buffer,y
+        jsr to_lower
+        sta zp_tmp2
+        pla
+        cmp zp_tmp2
+        bne ?tskip
+        inx
+        iny
+        jmp ?tcmp
+?tend   ; Table entry ended — check URL ext also ended
+        lda url_buffer,y
+        beq ?yes               ; both ended = match!
+?tskip  ; Skip to next entry (find next null)
+        lda bin_ext_tbl,x
+        beq ?tnxt
+        inx
+        jmp ?tskip
+?tnxt   inx                    ; skip the null
+        jmp ?tloop
+?no     clc
+        rts
+?yes    sec
+        rts
+
+bin_ext_tbl
+        dta c'pdf',0
+        dta c'doc',0
+        dta c'docx',0
+        dta c'xls',0
+        dta c'xlsx',0
+        dta c'zip',0
+        dta c'rar',0
+        dta c'7z',0
+        dta c'exe',0
+        dta c'mp3',0
+        dta c'mp4',0
+        dta c'avi',0
+        dta c'mov',0
+        dta c'wmv',0
+        dta c'mkv',0
+        dta c'flv',0
+        dta c'wav',0
+        dta c'flac',0
+        dta c'ogg',0
+        dta c'ppt',0
+        dta c'pptx',0
+        dta c'tar',0
+        dta c'gz',0
+        dta c'iso',0
+        dta c'bin',0
+        dta c'apk',0
+        dta c'dmg',0
+        dta c'swf',0
+        dta b(0)               ; end of table
+.endp
+
+; ----------------------------------------------------------------------------
 ; http_url_tolower - Convert DOMAIN part of url_buffer to lowercase
 ; Only lowercases up to first '/' after "://" (path is case-sensitive!)
 ; ----------------------------------------------------------------------------
@@ -473,23 +557,23 @@ use_proxy  dta b(0)           ; 0=direct, 1=proxy
         bne ?go
         rts
 ?go
-        ; Skip if URL already has proxy prefix (prevent double wrap)
-        ; Check for "proxy" substring in first 60 chars
+        ; Skip if URL already points to our server (proxy or search)
+        ; Check for "turiecfoto" substring in first 60 chars
         ldy #0
 ?chk    lda url_buffer,y
-        beq ?ok                ; end of string, no proxy found - proceed
-        cmp #'p'
+        beq ?ok                ; end of string, not found - proceed
+        cmp #'t'
         bne ?cn
         lda url_buffer+1,y
-        cmp #'r'
+        cmp #'u'
         bne ?cn
         lda url_buffer+2,y
-        cmp #'o'
+        cmp #'r'
         bne ?cn
         lda url_buffer+3,y
-        cmp #'x'
+        cmp #'i'
         bne ?cn
-        rts                    ; "prox" found - already proxied, skip
+        rts                    ; "turi" found - our server, skip proxy
 ?cn     iny
         cpy #60
         bne ?chk
@@ -549,8 +633,6 @@ use_proxy  dta b(0)           ; 0=direct, 1=proxy
         lda #0
         sta url_buffer,y
 ?upd    sty url_length
-        lda #0
-        sta url_length+1
 ?done   rts
 
 .endp
@@ -598,8 +680,6 @@ proxy_prefix dta c'N:https://turiecfoto.sk/proxy.php?url=',0
 ?done   lda #0
         sta url_buffer,y
         sty url_length
-        lda #0
-        sta url_length+1
         rts
 .endp
 

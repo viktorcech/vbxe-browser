@@ -487,8 +487,6 @@ close_div = open_div
         jsr render_flush_word
         jsr render_newline
         jsr render_newline         ; blank line above heading
-        lda #1
-        sta zp_in_heading
         lda current_tag_id
         cmp #TAG_H1
         beq ?h1
@@ -541,8 +539,6 @@ close_div = open_div
 .proc open_ul
         lda #0
         sta zp_list_type
-        lda #1
-        sta zp_in_list
         lda zp_indent
         clc
         adc #2
@@ -553,7 +549,6 @@ close_div = open_div
 .proc open_ol
         lda #1
         sta zp_list_type
-        sta zp_in_list
         lda #0
         sta zp_list_item
         lda zp_indent
@@ -569,11 +564,7 @@ close_div = open_div
         jmp render_list_bullet
 .endp
 
-.proc open_bold
-        lda #1
-        sta zp_in_bold
-        rts
-.endp
+open_bold = nop_tag
 
 .proc open_italic
         lda #ATTR_DECOR
@@ -582,8 +573,6 @@ close_div = open_div
 
 .proc close_heading
         jsr render_flush_word
-        lda #0
-        sta zp_in_heading
         lda #ATTR_NORMAL
         jsr render_set_attr
         jmp render_newline
@@ -600,8 +589,6 @@ close_para = open_para
 .endp
 
 .proc close_list
-        lda #0
-        sta zp_in_list
         lda zp_indent
         sec
         sbc #2
@@ -611,11 +598,7 @@ close_para = open_para
         rts
 .endp
 
-.proc close_bold
-        lda #0
-        sta zp_in_bold
-        rts
-.endp
+close_bold = nop_tag
 
 .proc close_italic
         lda #ATTR_NORMAL

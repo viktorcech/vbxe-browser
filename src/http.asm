@@ -341,6 +341,12 @@ pb_rd_save_hi    dta b(0)
 ?ci_go  jmp img_fetch_single
 
 ?not_img
+        ; Check for unsupported binary file types
+        jsr http_check_binary_ext
+        bcc ?not_bin
+        status_msg COL_RED, m_unsupported
+        rts
+?not_bin
         jsr http_apply_proxy
         ; Hide previous image if active
         lda img_active
@@ -386,4 +392,5 @@ pb_rd_save_hi    dta b(0)
         jmp ui_status_end
 
 m_nodata dta c'Empty response - check URL (press key)',0
+m_unsupported dta c'File type not supported (press key)',0
 .endp

@@ -185,11 +185,5 @@ RX_BUF_SIZE    = 256
         lda #FN_TIMEOUT
         sta DTIMLO
 
-        jsr SIOV
-        lda DSTATS
-        bmi ?err
-        clc
-        rts
-?err    sec
-        rts
+        jmp SIOV
 .endp

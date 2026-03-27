@@ -152,7 +152,14 @@ kgl_len dta 0
         lda #SCR_COLS-1
         sta zp_cursor_col
         dec zp_cursor_row
-        rts
+        jmp calc_scr_ptr       ; row changed, full recalc
 ?dec    dec zp_cursor_col
-        rts
+        ; Update cached screen pointer (back 2 bytes = 1 char+attr)
+        lda zp_scr_ptr
+        sec
+        sbc #2
+        sta zp_scr_ptr
+        bcs ?ok
+        dec zp_scr_ptr+1
+?ok     rts
 .endp

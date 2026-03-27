@@ -196,8 +196,6 @@ m_urlp  dta c'URL: ',0
         bcs ?cancel
 
         sty url_length
-        lda #0
-        sta url_length+1
 
         ; Lowercase entire URL (Atari keyboard is uppercase)
         ldy #0
@@ -260,17 +258,8 @@ m_go    dta c'Go to: ',0
 
         ; Image link: copy URL after "I:" to img_src_buf
         iny                        ; Y=2, skip "I:"
-        ldx #0
-?icp    lda (zp_tmp_ptr),y
-        sta img_src_buf,x
-        beq ?icpd
-        iny
-        inx
-        cpx #IMG_SRC_SIZE-1
-        bne ?icp
-        lda #0
-        sta img_src_buf,x
-?icpd   jsr img_fetch_single
+        jsr copy_img_src
+        jsr img_fetch_single
         jmp ui_status_end      ; restore "-- End --" bar after image view
 
 ?normal_link
@@ -284,8 +273,6 @@ m_go    dta c'Go to: ',0
         lda #0
         sta url_buffer,y
 ?cpdone sty url_length
-        lda #0
-        sta url_length+1
 
         jsr http_resolve_url   ; resolve relative URLs from links
         jsr history_push

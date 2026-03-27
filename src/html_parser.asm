@@ -107,33 +107,35 @@ parse_loop_re
         ldy chunk_idx
         cpy zp_rx_len
         beq parse_chunk_done
-
-        lda rx_buffer,y
         inc chunk_idx
-
+        ; Jump table dispatch (constant time, all 7 states)
         ldx zp_parse_state
-        beq ?normal
-        cpx #PS_IN_TAG
-        beq ?tag
-        cpx #PS_IN_ENTITY
-        beq ?entity
-        cpx #PS_IN_ATTRNAME
-        bne ?noan
-        jmp parse_attrname
-?noan   cpx #PS_IN_ATTRVAL
-        bne ?noav
-        jmp parse_attrval
-?noav   cpx #PS_SKIP_TAG
-        beq ?skip
-        jmp parse_comment
-?skip   jmp parse_skipmode
-
-?normal jmp parse_normal
-?tag    jmp parse_tag
-?entity jmp parse_entity
+        lda state_tbl_hi,x
+        sta zp_tmp_ptr+1
+        lda state_tbl_lo,x
+        sta zp_tmp_ptr
+        lda rx_buffer,y        ; reload char (Y = byte index before inc)
+        jmp (zp_tmp_ptr)
 
 parse_chunk_done
         rts
+
+state_tbl_lo
+        dta <parse_normal      ; 0 PS_NORMAL
+        dta <parse_tag         ; 1 PS_IN_TAG
+        dta <parse_entity      ; 2 PS_IN_ENTITY
+        dta <parse_attrname    ; 3 PS_IN_ATTRNAME
+        dta <parse_attrval     ; 4 PS_IN_ATTRVAL
+        dta <parse_skipmode    ; 5 PS_SKIP_TAG
+        dta <parse_comment     ; 6 PS_IN_COMMENT
+state_tbl_hi
+        dta >parse_normal
+        dta >parse_tag
+        dta >parse_entity
+        dta >parse_attrname
+        dta >parse_attrval
+        dta >parse_skipmode
+        dta >parse_comment
 
 ; --- Normal text ---
 .proc parse_normal
@@ -439,9 +441,7 @@ comment_dashes dta 0          ; consecutive '-' count before '>' (need 2+ for --
 ; ============================================================================
 ; html_flush / html_emit_char
 ; ============================================================================
-.proc html_flush
-        jmp render_flush_word
-.endp
+html_flush = render_flush_word
 
 .proc html_emit_char
         ldx zp_in_skip

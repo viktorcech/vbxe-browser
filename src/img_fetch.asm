@@ -4,6 +4,24 @@
 ; Images shown fullscreen one at a time after page loads
 ; ============================================================================
 
+; ----------------------------------------------------------------------------
+; copy_img_src - Copy from (zp_tmp_ptr)+Y to img_src_buf, null-terminated
+; Input: Y = start offset, zp_tmp_ptr = source
+; ----------------------------------------------------------------------------
+.proc copy_img_src
+        ldx #0
+?lp     lda (zp_tmp_ptr),y
+        sta img_src_buf,x
+        beq ?done
+        iny
+        inx
+        cpx #IMG_SRC_SIZE-1
+        bne ?lp
+        lda #0
+        sta img_src_buf,x
+?done   rts
+.endp
+
 img_hdr_w   dta a(0)           ; image width (16-bit LE, 8-320)
 img_hdr_h   dta b(0)           ; image height (8-bit, 8-192)
 img_pal_cnt dta a(0)           ; palette bytes read so far (16-bit, target=768)
@@ -297,8 +315,6 @@ img_fn_err   dta b(0)
         iny
         bne ?ri
 ?rid    sty url_length
-        lda #0
-        sta url_length+1
         jsr http_resolve_url
         ; Strip N: prefix back to img_src_buf
         ldy #0
@@ -343,8 +359,6 @@ img_fn_err   dta b(0)
         inx
         bne ?sfx
 ?sfxd   sty url_length
-        lda #0
-        sta url_length+1
         rts
 .endp
 
@@ -441,19 +455,15 @@ img_fn_err   dta b(0)
         lda #KEY_NONE
         sta CH
 
-        ; Restore text display
+        ; Restore text display (vbxe_img_hide ends with jmp setup_palette)
         jsr vbxe_img_hide
-        jsr setup_palette
         jsr img_restore_url
         jmp ui_status_done
 
-?e_open jsr fn_close
-        jsr img_restore_url
-        lda #<me_open
+?e_open lda #<me_open
         ldx #>me_open
-        jmp ui_show_error
-?e_hdr  jsr fn_close
-        jsr img_restore_url
+        jmp ?err_exit
+?e_hdr  jsr ?err_cleanup
         ; Patch error code digit into message string
         lda img_err_code
         clc
@@ -474,16 +484,17 @@ img_fn_err   dta b(0)
         lda #<me_hdr
         ldx #>me_hdr
         jmp ui_show_error
-?e_alloc jsr fn_close
-        jsr img_restore_url
-        lda #<me_alloc
+?e_alloc lda #<me_alloc
         ldx #>me_alloc
-        jmp ui_show_error
-?e_pal  jsr fn_close
-        jsr img_restore_url
-        lda #<me_pal
+        jmp ?err_exit
+?e_pal  lda #<me_pal
         ldx #>me_pal
+?err_exit
+        jsr ?err_cleanup
         jmp ui_show_error
+?err_cleanup
+        jsr fn_close
+        jmp img_restore_url
 
 m_imgview dta c' Image - press any key',0
 m_step1  dta c' IMG: resolving URL...',0
@@ -511,8 +522,6 @@ me_pal   dta c'IMG err: palette',0
         bne ?lp
         lda url_length
         sta url_save_len
-        lda url_length+1
-        sta url_save_len+1
         rts
 .endp
 
@@ -524,8 +533,6 @@ me_pal   dta c'IMG err: palette',0
         bne ?lp
         lda url_save_len
         sta url_length
-        lda url_save_len+1
-        sta url_length+1
         rts
 .endp
 
