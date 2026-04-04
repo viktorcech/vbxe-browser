@@ -1,6 +1,6 @@
-# VBXE Web Browser for Atari XE/XL
+# Cactus browser for Atari XE/XL
 
-80-column web browser for Atari 8-bit computers with VBXE graphics expansion, FujiNet networking, and ST mouse support.
+80-column web browser for Atari 8-bit computers with VBXE, FujiNet, and ST mouse.
 
 ![screenshot](https://img.shields.io/badge/status-beta-blue)
 
