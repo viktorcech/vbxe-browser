@@ -54,6 +54,8 @@ At the SDX command line, just run: `cactus.xex`
 - **Up to 64 links per page** with palette-encoded link detection, recycled on each page scroll
 - **Word wrapping** — intelligent wrapping at word boundaries with indentation support
 - **Skip to heading** — press H during `--More--` prompt to jump past navigation menus to next heading
+- **Find in page** — Ctrl+F (or F) opens a `Find:` prompt, highlights matches in yellow, and reports visible + total counts for the whole page
+- **Bookmarks** — Ctrl+B opens a 10-slot bookmark window stored on D1: for quick recall and saving of URLs
 - **Built-in web search** — type any query without a dot in the URL bar to search the web via turiecfoto.sk
 - **URL navigation** with address bar, auto-prefix, and case normalization
 - **Relative URL resolution** — links and images resolved against base URL
@@ -77,7 +79,10 @@ At the SDX command line, just run: `cactus.xex`
 | **Space** | Scroll to next page |
 | **U** | Enter URL or search query (no dot = web search via turiecfoto.sk) |
 | **B** | Back (history) |
+| **Ctrl+B** | Open bookmarks window (10 slots on D1:) |
+| **Ctrl+F** / **F** | Find text on page |
 | **H** | Skip to next heading (during `--More--`) |
+| **I** | Help / info screen |
 | **P** | Toggle proxy mode |
 | **Q** | Quit (also stops page loading) |
 
@@ -118,7 +123,9 @@ Manual build:
 | `img_fetch.asm` | Image download: header/palette/pixel streaming, URL resolution, converter integration |
 | `history.asm` | URL history stack (16 entries with scroll position) |
 | `mouse.asm` | ST mouse driver: Timer 1 IRQ (quadrature sampling) + VBI (cursor), MEMAC B safe |
-| `title.asm` | Welcome screen layout and strings |
+| `title.asm` | Welcome screen layout and strings, help screen |
+| `bookmarks.asm` | Bookmarks window (10 slots), D1: persistence |
+| `find.asm` | Find-in-page: prompt, viewport highlight, full-page count |
 | `data.asm` | Version string, large buffer allocations ($8800+) |
 | `build_stamp.asm` | Auto-generated build timestamp (created by `build.sh`) |
 

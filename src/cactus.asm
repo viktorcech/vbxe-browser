@@ -82,6 +82,7 @@ is_pal  dta b(1)             ; 1=PAL, 0=NTSC (default PAL)
         icl 'vbxe_init.asm'
         icl 'vbxe_text.asm'
         icl 'bookmarks.asm'
+        icl 'find.asm'
         icl 'vbxe_gfx.asm'
         icl 'fujinet.asm'
         icl 'http.asm'

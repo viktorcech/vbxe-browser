@@ -366,6 +366,16 @@
         beq ?key_quit
         cmp #'Q'
         beq ?key_quit
+        cmp #$06                ; Ctrl+F
+        beq ?key_find
+        cmp #'f'
+        beq ?key_find
+        cmp #'F'
+        beq ?key_find
+        jmp ?wait
+
+?key_find
+        jsr find_start
         jmp ?wait
 
 ?key_tab

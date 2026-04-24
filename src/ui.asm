@@ -75,9 +75,9 @@ m_urlp  dta c'URL: ',0
         cmp #'Q'
         beq ?quit
         cmp #'u'
-        beq ?url
+        beq ?url_j
         cmp #'U'
-        beq ?url
+        beq ?url_j
         cmp #'b'
         beq ?back_j
         cmp #'B'
@@ -92,16 +92,24 @@ m_urlp  dta c'URL: ',0
         beq ?ret_key
         cmp #$02                ; Ctrl+B = bookmarks window
         beq ?bkmark_j
+        cmp #$06                ; Ctrl+F = find in page
+        beq ?find_j
+        cmp #'f'                ; 'f' alt for find
+        beq ?find_j
+        cmp #'F'
+        beq ?find_j
         cmp #'i'                ; I = info / help screen
         beq ?info_j
         cmp #'I'
         beq ?info_j
         jmp ?loop
 
+?url_j    jmp ?url
 ?back_j   jmp ?back
 ?proxy_j  jmp ?proxy
 ?bkmark_j jmp ?bkmark
 ?info_j   jmp ?info
+?find_j   jmp ?find
 
 ?tab    jsr tab_next_link
         jmp ?loop
@@ -166,6 +174,9 @@ m_urlp  dta c'URL: ',0
 
 ?info   jsr show_info
         jsr show_welcome        ; restore welcome screen after info closes
+        jmp ?loop
+
+?find   jsr find_start
         jmp ?loop
 
         ; Check if user pressed a link number during --More--

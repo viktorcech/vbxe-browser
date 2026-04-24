@@ -258,21 +258,22 @@ tw_poff     dta c'Proxy: OFF (P to toggle)',0
 ?i      dta 0
 .endp
 
-IN_MAIN_N = 11
+IN_MAIN_N = 12
 in_main_hdr dta c'Browser',0
-in_main_lo  dta <in_m1,<in_m2,<in_m3,<in_m4,<in_m5,<in_m6,<in_m7,<in_m8,<in_m9,<in_m10,<in_m11
-in_main_hi  dta >in_m1,>in_m2,>in_m3,>in_m4,>in_m5,>in_m6,>in_m7,>in_m8,>in_m9,>in_m10,>in_m11
+in_main_lo  dta <in_m1,<in_m2,<in_m3,<in_m4,<in_m5,<in_m6,<in_m7,<in_m8,<in_m9,<in_m10,<in_m11,<in_m12
+in_main_hi  dta >in_m1,>in_m2,>in_m3,>in_m4,>in_m5,>in_m6,>in_m7,>in_m8,>in_m9,>in_m10,>in_m11,>in_m12
 in_m1   dta c'U             Enter URL, or search words (no dot)',0
 in_m2   dta c'B             Back (history)',0
 in_m3   dta c'Q             Quit to welcome screen',0
 in_m4   dta c'P             Toggle proxy (fast rendering)',0
 in_m5   dta c'H             Skip to next heading on page',0
 in_m6   dta c'Ctrl+B        Open bookmarks window',0
-in_m7   dta c'I             This help screen',0
-in_m8   dta c'TAB           Highlight next link',0
-in_m9   dta c'RETURN        Follow highlighted link / next page',0
-in_m10  dta c'SPACE         Next page (during --More--)',0
-in_m11  dta c'Click         Follow link under mouse cursor',0
+in_m7   dta c'F (Ctrl+F)   Find text on page',0
+in_m8   dta c'I             This help screen',0
+in_m9   dta c'TAB           Highlight next link',0
+in_m10  dta c'RETURN        Follow highlighted link / next page',0
+in_m11  dta c'SPACE         Next page (during --More--)',0
+in_m12  dta c'Click         Follow link under mouse cursor',0
 
 IN_BK_N = 4
 in_bk_hdr dta c'Bookmarks window',0
