@@ -79,18 +79,29 @@ m_urlp  dta c'URL: ',0
         cmp #'U'
         beq ?url
         cmp #'b'
-        beq ?back
+        beq ?back_j
         cmp #'B'
-        beq ?back
+        beq ?back_j
         cmp #'p'
-        beq ?proxy
+        beq ?proxy_j
         cmp #'P'
-        beq ?proxy
+        beq ?proxy_j
         cmp #ATASCII_TAB
         beq ?tab
         cmp #ATASCII_RET
         beq ?ret_key
+        cmp #$02                ; Ctrl+B = bookmarks window
+        beq ?bkmark_j
+        cmp #'i'                ; I = info / help screen
+        beq ?info_j
+        cmp #'I'
+        beq ?info_j
         jmp ?loop
+
+?back_j   jmp ?back
+?proxy_j  jmp ?proxy
+?bkmark_j jmp ?bkmark
+?info_j   jmp ?info
 
 ?tab    jsr tab_next_link
         jmp ?loop
@@ -148,6 +159,13 @@ m_urlp  dta c'URL: ',0
         eor #1
         sta use_proxy
         jsr show_welcome
+        jmp ?loop
+
+?bkmark jsr bk_screen
+        jmp ?loop
+
+?info   jsr show_info
+        jsr show_welcome        ; restore welcome screen after info closes
         jmp ?loop
 
         ; Check if user pressed a link number during --More--

@@ -1,0 +1,499 @@
+; ============================================================================
+; Bookmarks Module
+; Storage: D1: sectors 719-720 (raw SIO, no DOS dependency)
+; 4 slots × 64 bytes, URL NUL-terminated.
+; Buffer at $0500 (page 5) — does not consume data.asm buffer space.
+;
+; UI pattern follows mag/menu.asm: CH register polling, clear CH after read.
+; ============================================================================
+
+BK_SLOTS       = 10
+BK_SLOT_SZ     = 64
+BK_SECT_FIRST  = 716                ; 5 sectors (716..720), 2 slots per sector
+BK_NUM_SECT    = 5
+
+STICK0         = $0278              ; port 1 joystick shadow (MAG-style nav)
+
+bookmarks_buf  = $0800              ; 640 bytes of free RAM (pages 8..10)
+
+; Per-slot address lookup (10 slots, 64 B each at bookmarks_buf)
+bk_slot_lo
+        :BK_SLOTS dta <(bookmarks_buf + # * BK_SLOT_SZ)
+bk_slot_hi
+        :BK_SLOTS dta >(bookmarks_buf + # * BK_SLOT_SZ)
+
+; ----------------------------------------------------------------------------
+; bk_slot_addr - Set zp_tmp_ptr to slot X address (X preserved)
+; ----------------------------------------------------------------------------
+.proc bk_slot_addr
+        lda bk_slot_lo,x
+        sta zp_tmp_ptr
+        lda bk_slot_hi,x
+        sta zp_tmp_ptr+1
+        rts
+.endp
+
+; ----------------------------------------------------------------------------
+; bk_sio_sector - Read or write one D1: sector
+; Input: A=0 read, A!=0 write; bk_sect_lo/hi = sector; zp_tmp_ptr = buffer
+; Output: C=0 ok, C=1 error
+; ----------------------------------------------------------------------------
+.proc bk_sio_sector
+        sta bk_rw
+        lda #$31
+        sta DDEVIC
+        lda #1
+        sta DUNIT
+        lda bk_rw
+        beq ?rd
+        lda #'P'
+        sta DCOMND
+        lda #$80
+        bne ?dirset
+?rd     lda #'R'
+        sta DCOMND
+        lda #$40
+?dirset sta DSTATS
+        lda zp_tmp_ptr
+        sta DBUFLO
+        lda zp_tmp_ptr+1
+        sta DBUFHI
+        lda #15
+        sta DTIMLO
+        lda #128
+        sta DBYTLO
+        lda #0
+        sta DBYTHI
+        lda bk_sect_lo
+        sta DAUX1
+        lda bk_sect_hi
+        sta DAUX2
+        jsr SIOV
+        lda DSTATS
+        bmi ?err
+        clc
+        rts
+?err    sec
+        rts
+.endp
+
+bk_sect_lo  dta 0
+bk_sect_hi  dta 0
+bk_rw       dta 0
+bk_sel      dta 0
+
+; ----------------------------------------------------------------------------
+; bk_load - Read both sectors into bookmarks_buf, sanitize invalid slots.
+; Called once at startup from main.
+; ----------------------------------------------------------------------------
+.proc bk_load
+        lda #0                      ; A=0 = read
+        jsr bk_rw_all
+        bcs ?fail
+        jmp bk_sanitize
+?fail   ldx #BK_SLOTS-1
+?zl     stx ?tmp
+        jsr bk_slot_addr
+        lda #0
+        ldy #0
+        sta (zp_tmp_ptr),y
+        ldx ?tmp
+        dex
+        bpl ?zl
+        rts
+?tmp    dta 0
+.endp
+
+; bk_rw_all - Read (A=0) or write (A!=0) all BK_NUM_SECT sectors.
+; Sector i = BK_SECT_FIRST + i, buffer at bookmarks_buf + i*128.
+.proc bk_rw_all
+        sta bk_rw_req
+        ldx #0
+?lp     stx ?i
+        ; Sector = BK_SECT_FIRST + X
+        txa
+        clc
+        adc #<BK_SECT_FIRST
+        sta bk_sect_lo
+        lda #0
+        adc #>BK_SECT_FIRST
+        sta bk_sect_hi
+        ; Buffer = bookmarks_buf + X*128
+        lda #<bookmarks_buf
+        sta zp_tmp_ptr
+        txa
+        lsr                         ; even X? no — wait, X*128 low = (X&1)*128
+        ; Actually X*128: X=0 -> $00 lo, X=1 -> $80 lo, X=2 -> $00 lo, X=3 -> $80 lo...
+        ; high: X=0 -> base, X=1 -> base, X=2 -> base+1, X=3 -> base+1, ...
+        ; Simpler: use lookup table
+        lda bk_sect_off_lo,x
+        clc
+        adc #<bookmarks_buf
+        sta zp_tmp_ptr
+        lda bk_sect_off_hi,x
+        adc #>bookmarks_buf
+        sta zp_tmp_ptr+1
+        lda bk_rw_req
+        jsr bk_sio_sector
+        bcs ?err
+        ldx ?i
+        inx
+        cpx #BK_NUM_SECT
+        bne ?lp
+        clc
+        rts
+?err    sec
+        rts
+?i      dta 0
+.endp
+
+; X*128 offsets for BK_NUM_SECT=5 sectors
+bk_sect_off_lo dta $00, $80, $00, $80, $00
+bk_sect_off_hi dta $00, $00, $01, $01, $02
+bk_rw_req      dta 0
+
+; ----------------------------------------------------------------------------
+; bk_sanitize - For each slot, verify byte 0 to first NUL are printable ASCII.
+; If not (or no NUL within 63 bytes), zero byte 0 to mark empty.
+; Protects against garbage in uninitialized ATR sectors.
+; ----------------------------------------------------------------------------
+.proc bk_sanitize
+        ldx #0
+?slot   stx ?i
+        jsr bk_slot_addr
+        ldy #0
+?scan   lda (zp_tmp_ptr),y
+        beq ?ok                     ; NUL terminator = slot is valid
+        cmp #$20
+        bcc ?bad
+        cmp #$7F
+        bcs ?bad
+        iny
+        cpy #BK_SLOT_SZ-1
+        bne ?scan
+?bad    lda #0
+        ldy #0
+        sta (zp_tmp_ptr),y
+?ok     ldx ?i
+        inx
+        cpx #BK_SLOTS
+        bne ?slot
+        rts
+?i      dta 0
+.endp
+
+; ----------------------------------------------------------------------------
+; bk_save - Persist bookmarks_buf back to both sectors
+; ----------------------------------------------------------------------------
+.proc bk_save
+        lda #1                      ; A!=0 = write
+        jmp bk_rw_all
+.endp
+
+; ============================================================================
+; Bookmark window UI (MAG-style: CH register polling, not CIO)
+; ============================================================================
+
+.proc bk_screen
+        jsr mouse_hide_cursor
+        jsr ui_init
+        jsr bk_draw_header
+        jsr bk_draw_hint
+
+        lda #0
+        sta bk_sel
+        jsr bk_draw_list
+
+?wait   lda RTCLOK+2                ; sync to VBI (MAG pattern)
+?wvs    cmp RTCLOK+2
+        beq ?wvs
+
+        ; Joystick port 1 — MAG uses stick0 for up/down
+        lda STICK0
+        cmp #14                     ; up
+        beq ?stk_up
+        cmp #13                     ; down
+        beq ?stk_dn
+
+        ; Keyboard via CH
+        lda CH
+        cmp #$FF
+        beq ?wait
+        pha
+        lda #$FF
+        sta CH
+        pla
+
+        cmp #$0C                    ; RETURN = confirm (open filled / edit empty)
+        bne ?kret
+        jmp ?confirm
+?kret   cmp #$1C                    ; ESC = close window
+        bne ?kesc
+        jmp ?close
+?kesc   cmp #$0E                    ; '-' alt up
+        beq ?ku
+        cmp #$8E                    ; CTRL+'-' alt up
+        beq ?ku
+        cmp #$0F                    ; '=' alt down
+        beq ?kdn
+        cmp #$8F                    ; CTRL+'='
+        beq ?kdn
+        cmp #$3A                    ; D = delete
+        bne ?kdel_n
+        jmp ?del
+?kdel_n jmp ?wait                   ; unrecognised key
+
+?stk_up jsr bk_stick_release
+?ku     lda bk_sel
+        bne ?do_up
+        jmp ?wait
+?do_up  dec bk_sel
+        jsr bk_draw_list
+        jmp ?wait
+
+?stk_dn jsr bk_stick_release
+?kdn    lda bk_sel
+        cmp #BK_SLOTS-1
+        bcc ?do_dn
+        jmp ?wait
+?do_dn  inc bk_sel
+        jsr bk_draw_list
+        jmp ?wait
+
+?confirm
+        ldx bk_sel
+        jsr bk_slot_addr
+        ldy #0
+        lda (zp_tmp_ptr),y
+        bne ?doopen                 ; filled -> open URL
+        ; empty -> edit mode
+        ldx bk_sel
+        jsr bk_edit
+        jsr bk_draw_list
+        jsr bk_draw_hint
+        jmp ?wait
+
+?doopen ldy #0
+?opcp   lda (zp_tmp_ptr),y
+        sta url_buffer,y
+        beq ?opd
+        iny
+        cpy #URL_BUF_SIZE-1
+        bne ?opcp
+        lda #0
+        sta url_buffer,y
+?opd    sty url_length
+
+        ; Detect if URL (has '.') or search query (no '.') — mirror ui_url_input
+        ldy #0
+?ckd    lda url_buffer,y
+        beq ?nodot                  ; end of string, no dot = search phrase
+        cmp #'.'
+        beq ?gonav                  ; dot found = treat as URL
+        iny
+        bne ?ckd
+?nodot  jsr url_build_search        ; rewrite url_buffer as search URL
+?gonav  lda #$FF
+        sta zp_mouse_prev_x
+        jsr history_push
+        jmp http_navigate
+
+?del    ldx bk_sel
+        jsr bk_slot_addr
+        ldy #0
+        lda (zp_tmp_ptr),y
+        bne ?dodel
+        jmp ?wait
+?dodel  lda #0
+        sta (zp_tmp_ptr),y
+        jsr bk_save
+        jsr bk_draw_list
+        jmp ?wait
+
+?close  lda #$FF
+        sta zp_mouse_prev_x
+        rts
+.endp
+
+; ----------------------------------------------------------------------------
+; bk_stick_release - Wait for joystick to return to center (MAG's debounce)
+; ----------------------------------------------------------------------------
+.proc bk_stick_release
+?r      lda STICK0
+        cmp #15
+        bne ?r
+        rts
+.endp
+
+; ----------------------------------------------------------------------------
+; bk_edit - Inline edit of slot X using CIO kbd_get_line.
+; On RETURN: save URL to slot and persist. On ESC: slot unchanged.
+; ----------------------------------------------------------------------------
+.proc bk_edit
+        stx ?slot
+
+        ; Clear row, position cursor, yellow attr
+        lda ?slot
+        clc
+        adc #CONTENT_TOP+1
+        pha
+        jsr vbxe_clear_row
+        pla
+        ldx #4
+        jsr vbxe_setpos
+        lda #COL_YELLOW
+        jsr vbxe_setattr
+
+        ; "N. " prefix
+        lda ?slot
+        clc
+        adc #'1'
+        jsr vbxe_putchar
+        lda #'.'
+        jsr vbxe_putchar
+        lda #' '
+        jsr vbxe_putchar
+
+        ; Edit into url_save_buf (256 B, free outside image fetch)
+        lda #<url_save_buf
+        sta zp_tmp_ptr
+        lda #>url_save_buf
+        sta zp_tmp_ptr+1
+        ldx #BK_SLOT_SZ-2
+        jsr kbd_get_line
+        bcs ?cancel
+        cpy #0
+        beq ?cancel
+
+        ; Copy url_save_buf (NUL-terminated) -> slot[?slot]
+        ldx ?slot
+        jsr bk_slot_addr
+        ldy #0
+?cp     lda url_save_buf,y
+        sta (zp_tmp_ptr),y
+        beq ?cpd
+        iny
+        cpy #BK_SLOT_SZ-1
+        bne ?cp
+        lda #0
+        sta (zp_tmp_ptr),y
+?cpd    jmp bk_save
+?cancel rts
+?slot   dta 0
+.endp
+
+; ----------------------------------------------------------------------------
+; Drawing helpers
+; ----------------------------------------------------------------------------
+
+.proc bk_draw_header
+        lda #TITLE_ROW
+        jsr vbxe_clear_row
+        lda #TITLE_ROW
+        ldx #35
+        jsr vbxe_setpos
+        lda #ATTR_HEADING
+        jsr vbxe_setattr
+        lda #<m_hdr
+        ldx #>m_hdr
+        jsr vbxe_print
+        lda #ATTR_NORMAL
+        jmp vbxe_setattr
+m_hdr   dta c'Bookmarks',0
+.endp
+
+.proc bk_draw_hint
+        lda #STATUS_ROW
+        ldx #COL_GRAY
+        jsr vbxe_fill_row
+        lda #STATUS_ROW
+        ldx #0
+        jsr vbxe_setpos
+        lda #COL_GRAY
+        jsr vbxe_setattr
+        lda #<m_hint
+        ldx #>m_hint
+        jsr vbxe_print
+        lda #ATTR_NORMAL
+        jmp vbxe_setattr
+m_hint  dta c' Joy/-=:move  RET:open/edit  D:del  ESC:close',0
+.endp
+
+.proc bk_draw_list
+        ldx #0
+?lp     stx ?i
+        txa
+        clc
+        adc #CONTENT_TOP+1
+        pha
+        jsr vbxe_clear_row
+        pla
+        ldx #4
+        jsr vbxe_setpos
+
+        ; Attribute: yellow if selected, normal otherwise
+        lda bk_sel
+        cmp ?i
+        bne ?nor
+        lda #COL_YELLOW
+        jmp ?att
+?nor    lda #ATTR_NORMAL
+?att    jsr vbxe_setattr
+
+        ; MAG-style cursor: ">" on selected row, " " elsewhere
+        lda bk_sel
+        cmp ?i
+        bne ?csp
+        lda #'>'
+        jmp ?cwr
+?csp    lda #' '
+?cwr    jsr vbxe_putchar
+        lda #' '
+        jsr vbxe_putchar
+
+        ; Slot number label: " 1.".." 9." for slots 0-8, "10." for slot 9
+        lda ?i
+        clc
+        adc #1                      ; 1..10
+        cmp #10
+        bne ?sng
+        ; "10"
+        lda #'1'
+        jsr vbxe_putchar
+        lda #'0'
+        jmp ?lbl_dot
+?sng    ; " N"
+        pha
+        lda #' '
+        jsr vbxe_putchar
+        pla
+        clc
+        adc #'0'
+?lbl_dot jsr vbxe_putchar
+        lda #'.'
+        jsr vbxe_putchar
+        lda #' '
+        jsr vbxe_putchar
+
+        ldx ?i
+        jsr bk_slot_addr
+        ldy #0
+        lda (zp_tmp_ptr),y
+        bne ?url
+        lda #<m_emp
+        ldx #>m_emp
+        jsr vbxe_print
+        jmp ?next
+?url    lda zp_tmp_ptr
+        ldx zp_tmp_ptr+1
+        jsr vbxe_print
+?next   ldx ?i
+        inx
+        cpx #BK_SLOTS
+        bne ?lp_j
+        lda #ATTR_NORMAL
+        jmp vbxe_setattr
+?lp_j   jmp ?lp
+?i      dta 0
+m_emp   dta c'(empty)',0
+.endp

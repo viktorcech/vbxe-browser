@@ -2,7 +2,7 @@
 ; Cactus - Web Browser for Atari XE/XL
 ; Requires: VBXE + FujiNet
 ; Assembler: MADS
-; Build: mads browser.asm -o:browser.xex
+; Build: mads cactus.asm -o:cactus.xex
 ; ============================================================================
 
         opt h+                 ; Atari XEX header
@@ -39,6 +39,7 @@
         jsr kbd_init
         jsr mouse_init
         jsr history_init
+        jsr bk_load
         jsr html_reset
         jsr render_reset
         jsr show_welcome
@@ -80,6 +81,7 @@ is_pal  dta b(1)             ; 1=PAL, 0=NTSC (default PAL)
         icl 'vbxe_detect.asm'
         icl 'vbxe_init.asm'
         icl 'vbxe_text.asm'
+        icl 'bookmarks.asm'
         icl 'vbxe_gfx.asm'
         icl 'fujinet.asm'
         icl 'http.asm'
